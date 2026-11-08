@@ -1,0 +1,36 @@
+# Basic dependencies
+numpy==1.24.3
+scipy==1.10.1
+PyYAML==6.0.1
+yacs==0.1.8
+addict==2.4.0
+packaging==26.0
+
+# Computer vision
+opencv-python==4.8.1.78
+Pillow
+pycocotools==2.0.7
+shapely==2.0.7
+
+# Model dependencies
+timm==0.4.12
+einops==0.7.0
+
+# Training and evaluation
+matplotlib==3.7.5
+pandas==2.0.3
+scikit-learn==1.3.2
+motmetrics==1.4.0
+json-tricks==3.17.3
+tqdm==4.67.3
+tensorboardX==2.6.2.2
+
+# Model complexity and profiling
+torchprofile==0.0.4
+torchsummary==1.5.1
+
+# Utilities
+prettytable==3.11.0
+tabulate==0.9.0
+termcolor==2.4.0
+six==1.17.0
