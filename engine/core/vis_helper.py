@@ -38,7 +38,6 @@ def draw_skeleton_in_origin_image(batch_image_list, batch_joints_list, batch_bbo
         bbox = batch_bbox_list[index]
 
         image_name = image_path[image_path.index("images") + len("images") + 1:]
-        # image_name = image_path[image_path.index("frames") + len("frames") + 1:]
 
         vis_image_save_path = osp.join(save_folder, image_name)
         if osp.exists(vis_image_save_path):
@@ -90,8 +89,6 @@ def add_poseTrack_joint_connection_to_image(img_demo, joints, sure_threshold=0.8
         if flag_only_draw_sure is False:
             sure1 = sure2 = 1
         if sure1 > sure_threshold and sure2 > sure_threshold:
-            # if sure1 > 0.8 and sure2 > 0.8:
-            # cv2.line(img_demo, (x1, y1), (x2, y2), color, thickness=8)
             cv2.line(img_demo, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness=6)
     return img_demo
 

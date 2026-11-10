@@ -8,8 +8,7 @@ __all__ = ["DATASET_REGISTRY", "MODEL_REGISTRY", "BACKBONE_REGISTRY"]
 
 class Registry(object):
     """
-    The registry that provides name -> object mapping, to support third-party
-    users' custom modules.
+    Map registered names to objects, including custom modules.
 
     To create a registry (e.g. a backbone registry):
     .. code-block:: python

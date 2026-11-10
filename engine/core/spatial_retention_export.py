@@ -1,8 +1,7 @@
-"""Read-only ISP token-selection recorder; does not run or alter pruning.
+"""Export coarse-branch token selections as masks on the original grid.
 
-Consumes either the existing model.coarse_prune_vis payload or a final
-original-grid keep_mask (True = retained). NumPy is the only dependency;
-detached Torch tensors are accepted without importing Torch.
+Accepts model.coarse_prune_vis or a binary keep_mask (True = retained).
+Arrays are stored with NumPy; Torch tensors are detached and converted to arrays.
 """
 from __future__ import annotations
 
@@ -28,11 +27,11 @@ def _array(value):
 
 
 def records_from_collated_meta(meta):
-    """Adapter for default PyTorch collation of the inspected PoseTrack dataset.
+    """Build records from PoseTrack metadata collated by a PyTorch DataLoader.
 
-    Add meta['dataset_index'] in Dataset.__getitem__ first. Input order is the
-    current image followed by ref_sup_image/supp_idx, NOT chronological order.
-    Custom collate functions or reordered model inputs need their own adapter.
+    Metadata must include dataset_index. Frame order follows the model input:
+    the current image followed by ref_sup_image/supp_idx. Custom collation or
+    reordered inputs require a corresponding metadata adapter.
     """
     sample_ids = _array(meta["dataset_index"])
     if sample_ids.ndim != 1 or sample_ids.dtype.kind not in "iu":
@@ -71,13 +70,13 @@ def records_from_collated_meta(meta):
 
 
 def selection_mask(vis, *, padding="masked"):
-    """Return [B,T,H,W] bool mask in ORIGINAL INPUT order, not time order.
+    """Return a [B,T,H,W] boolean mask in model input order.
 
-    padding='masked': require the actual selected-token valid_mask.
-    padding='none': explicit opt-in for old genuinely unpadded fixed-K batches.
-    A direct keep_mask is already on the original grid and needs no padding
-    mask: accept [B,T*H*W] or [B,T,H,W], with 1/True meaning retained.
-    Candidate budget fields are deliberately NOT used as actual retained K.
+    padding='masked' requires valid_mask for selected indices in padded batches.
+    padding='none' accepts batches whose selected indices are all valid.
+    A binary keep_mask can directly supply the original-grid selection as
+    [B,T*H*W] or [B,T,H,W], with 1/True meaning retained. Selection counts come
+    from the mask or the valid selected indices.
     """
     if vis is None:
         raise ValueError("Missing coarse_prune_vis; enable collect_prune_vis first")

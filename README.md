@@ -72,9 +72,9 @@ OTA-pose/
 
 **3) Pretrained Weights**
 
-Download the ViTPose-L pretrained weights from the [official ViTPose GitHub repository](https://github.com/ViTAE-Transformer/ViTPose). Please refer to the repository for the pretrained model download links.
+Download the COCO-pretrained ViTPose-L weights from the [official ViTPose GitHub repository](https://github.com/ViTAE-Transformer/ViTPose).
 
-The downloaded weights should correspond to the ViTPose-L model trained on COCO. Rename the file to `ViTPose-L-weight.pth` if necessary, and place it under the `pretrained` directory:
+Rename the file to `ViTPose-L-weight.pth` if necessary, and place it under the `pretrained` directory:
 
 ```text
 OTA-pose/
@@ -116,8 +116,6 @@ MODEL:
 The paths above are examples for PoseTrack2018. Please make the corresponding changes for PoseTrack2021.
 
 ## 2. Training
-
-We support training on both PoseTrack2018 and PoseTrack2021 datasets.
 
 Before running the commands, replace `/path/to/OTA-pose` with the actual path to your project directory. Set `CUDA_VISIBLE_DEVICES` and `--nproc_per_node` according to the number of available GPUs.
 

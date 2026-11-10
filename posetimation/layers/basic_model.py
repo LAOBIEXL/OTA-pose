@@ -113,11 +113,7 @@ class ChainOfBasicBlocks(nn.Module):
         for i in range(1, num_blocks):
             layers.append(BasicBlock(ouput_channel, ouput_channel, stride, downsample=None, groups=groups))
 
-        # return nn.Sequential(*layers)
         self.layers = nn.Sequential(*layers)
 
     def forward(self, input):
         return self.layers(input)
-
-
-

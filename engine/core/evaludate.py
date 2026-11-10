@@ -37,14 +37,11 @@ def dist_acc(dists, thr=0.5, percentage=True):
 
 
 def pck_accuracy(output, target, box_xywh, hm_type="gaussian", thr=0.5, ):
-    '''
-        In order to evaluate the effect of the model on PennAction.
+    """Compute PCK from heatmap peaks using bounding-box size for normalization.
 
-        Calculate accuracy according to PCK (),
-        but uses ground truth heatmap rather than x,y locations
-        First value to be returned is average accuracy across 'idxs',
-        followed by individual accuracies
-    '''
+    Return joint accuracies, their mean, the valid-joint count, predicted
+    coordinates, and per-joint match and sample counts.
+    """
     idx = list(range(output.shape[1]))
     norm = 1.0
     if hm_type == 'gaussian':
@@ -60,10 +57,8 @@ def pck_accuracy(output, target, box_xywh, hm_type="gaussian", thr=0.5, ):
         # pck 0.2
         norm = body_size
 
-        # norm = np.ones((pred.shape[0], 1)) * batch_body_size * aspect
-        # norm = np.ones((pred.shape[0], 2)) * np.array([h, w]) / 10
 
-    dists = calc_dists(pred, target, norm)  # use a fixed length as a measure rather than the length of body parts
+    dists = calc_dists(pred, target, norm)  # Normalize by bounding-box size in heatmap coordinates.
 
     acc = np.zeros((len(idx) + 1))
     avg_acc = 0
@@ -82,7 +77,6 @@ def pck_accuracy(output, target, box_xywh, hm_type="gaussian", thr=0.5, ):
             acc[i + 1] = match_cnt_item / num_cnt_item
         else:
             acc[i + 1] = -1
-        # acc[i + 1] = dist_acc(dists[idx[i]], thr, percentage=False)
         if acc[i + 1] >= 0:
             avg_acc = avg_acc + acc[i + 1]
             cnt += 1
@@ -95,22 +89,13 @@ def pck_accuracy(output, target, box_xywh, hm_type="gaussian", thr=0.5, ):
 
 
 def pck_accuracy_origin_image(pred, target, box_xywh, thr=0.5, ):
-    '''
-        In order to evaluate the effect of the model on PennAction.
+    """Compute PCK from image coordinates using bounding-box size for normalization.
 
-        Calculate accuracy according to PCK (),
-        but uses ground truth heatmap rather than x,y locations
-        First value to be returned is average accuracy across 'idxs',
-        followed by individual accuracies
-    '''
+    Return joint accuracies, their mean, the valid-joint count, predicted
+    coordinates, and per-joint match and sample counts.
+    """
     idx = list(range(pred.shape[1]))
     norm = 1.0
-    # if hm_type == 'gaussian':
-    #     # pred, _ = get_max_preds(output)
-    #     # target, _ = get_max_preds(target)
-
-    # h = output.shape[2]
-    # w = output.shape[3]
 
     box_w = box_xywh[2].numpy()
     box_h = box_xywh[3].numpy()
@@ -119,10 +104,8 @@ def pck_accuracy_origin_image(pred, target, box_xywh, thr=0.5, ):
     # pck 0.2
     norm = body_size
 
-    # norm = np.ones((pred.shape[0], 1)) * batch_body_size * aspect
-    # norm = np.ones((pred.shape[0], 2)) * np.array([h, w]) / 10
 
-    dists = calc_dists(pred, target, norm)  # use a fixed length as a measure rather than the length of body parts
+    dists = calc_dists(pred, target, norm)  # Normalize by bounding-box size in image coordinates.
 
     acc = np.zeros((len(idx) + 1))
     avg_acc = 0
@@ -141,7 +124,6 @@ def pck_accuracy_origin_image(pred, target, box_xywh, thr=0.5, ):
             acc[i + 1] = match_cnt_item / total_cnt_item
         else:
             acc[i + 1] = -1
-        # acc[i + 1] = dist_acc(dists[idx[i]], thr, percentage=False)
         if acc[i + 1] >= 0:
             avg_acc = avg_acc + acc[i + 1]
             cnt += 1
@@ -155,12 +137,11 @@ def pck_accuracy_origin_image(pred, target, box_xywh, thr=0.5, ):
 
 
 def accuracy(output, target, hm_type='gaussian', thr=0.5):
-    '''
-    Calculate accuracy according to PCK (),
-    but uses ground truth heatmap rather than x,y locations
-    First value to be returned is average accuracy across 'idxs',
-    followed by individual accuracies
-    '''
+    """Compute PCK from heatmap peaks, normalized by one tenth of the heatmap size.
+
+    Return joint accuracies, their mean, the valid-joint count, and predicted
+    coordinates.
+    """
     idx = list(range(output.shape[1]))
     norm = 1.0
     if hm_type == 'gaussian':
@@ -169,7 +150,7 @@ def accuracy(output, target, hm_type='gaussian', thr=0.5):
         h = output.shape[2]
         w = output.shape[3]
         norm = np.ones((pred.shape[0], 2)) * np.array([h, w]) / 10
-    dists = calc_dists(pred, target, norm)  # use a fixed length as a measure rather than the length of body parts
+    dists = calc_dists(pred, target, norm)
 
     acc = np.zeros((len(idx) + 1))
     avg_acc = 0

@@ -587,7 +587,7 @@ class Model(nn.Module):
         if prune_valid_mask is not None:
             x = x * prune_valid_mask.unsqueeze(-1).to(dtype=x.dtype)
 
-        # 如果使用token恢复且不是no_prune模式（no_prune模式已保留所有token，无需恢复）
+        # 对启用恢复的剪枝结果执行 token 恢复。
         if self.use_recover and not self.no_prune:
             # 复制可学习的token嵌入到批次大小
             x_token = repeat(self.x_token, '() n c -> b n c', b=b)

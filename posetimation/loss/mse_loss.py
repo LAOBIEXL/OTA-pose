@@ -8,7 +8,6 @@ class JointMSELoss(nn.Module):
     def __init__(self, use_target_weight):
         super(JointMSELoss, self).__init__()
         self.criterion = nn.MSELoss(reduction='mean')
-        # self.criterion = nn.MSELoss(reduction='elementwise_mean')
         self.use_target_weight = use_target_weight
 
     def forward(self, output, target, target_weight, effective_num_joints: int = None):

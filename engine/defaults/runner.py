@@ -16,7 +16,6 @@ class DefaultRunner:
     def __init__(self, cfg, args, **kwargs):
         self.cfg = cfg
         self.args = args
-        # self.PE_Name = args.detector_name
         self.train = args.train
         self.val = args.val
         self.val_from_checkpoint_id = args.val_from_checkpoint

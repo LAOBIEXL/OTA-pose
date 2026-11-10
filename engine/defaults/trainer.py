@@ -7,7 +7,6 @@ import os
 from datetime import timedelta
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-# from tensorboardX import SummaryWriter
 
 from .base import BaseExecutor
 from .checkpoints import get_latest_checkpoint, save_checkpoint, resume
@@ -28,9 +27,6 @@ class DefaultTrainer(BaseExecutor):
     def __init__(self, cfg, output_folders: dict, *args, **kwargs):
         super().__init__(cfg, output_folders, TRAIN_PHASE, **kwargs)
         logger = logging.getLogger(__name__)
-        # logger.info("-------------------CONFIG PARAMETERS-----------------------------")
-        # logger.info(cfg)
-        # logger.info("-------------------------END-------------------------------------")
 
         cfg = self.cfg
         # 这些参数由 runner 传进来，描述当前进程在 DDP 里的位置。
@@ -146,7 +142,7 @@ class DefaultTrainer(BaseExecutor):
                 self.model,
                 device_ids=[self.local_rank],
                 output_device=self.local_rank,
-                # 当前模型里有些分支可能并不是每次 forward 都会用到，所以允许未使用参数。
+                # 各次前向传播可启用不同分支，因此允许存在未使用的参数。
                 find_unused_parameters=True,
             )
         elif len(self.GPUS) > 1:
@@ -216,8 +212,6 @@ class DefaultTrainer(BaseExecutor):
                     dist.barrier()
 
             # record learning_rate
-            # writer = self.tb_writer_dict["writer"]
-            # writer.add_scalar('learning_rate', self.lr_scheduler.get_lr()[0], epoch)
 
         # 训练结束后仅做一次最终完整验证（不做中间周期验证）。
         if self.cfg.MODEL.EVALUATE:

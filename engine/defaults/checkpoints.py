@@ -93,7 +93,7 @@ def save_checkpoint(epoch, save_folder, model, optimizer, lr_scheduler=None, **k
 
 
 def resume(model, optimizer, checkpoint_file, lr_scheduler=None, **kwargs):
-    """Resume training from checkpoint with graceful degradation on load failure."""
+    """Restore model, optimizer, scheduler, and training progress from a checkpoint."""
     logger = logging.getLogger(__name__)
 
     ext_dict = {}

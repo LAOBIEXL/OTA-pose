@@ -15,7 +15,6 @@ from tensorboardX import SummaryWriter
 from .evaludate import accuracy, pck_accuracy, pck_accuracy_origin_image
 from engine.core import CORE_FUNCTION_REGISTRY, BaseFunction, AverageMeter
 
-# from engine.evaludate import accuracy
 from engine.defaults import VAL_PHASE, TEST_PHASE, TRAIN_PHASE
 from datasets.process import dark_get_final_preds
 from datasets.transforms import reverse_transforms
@@ -28,17 +27,7 @@ from tabulate import tabulate
 
 
 def cnt_grad(model):
-    """
-    计算模型所有参数梯度的总范数（Total Norm）
-
-    用于监测训练过程中梯度的大小，帮助判断模型是否正常收敛或是否存在梯度消失/爆炸问题。
-
-    Args:
-        model: PyTorch模型对象
-
-    Returns:
-        float: 所有参数梯度范数的总和
-    """
+    """对所有已计算梯度的参数，求其梯度 L2 范数之和。"""
     total_norm = 0.0
     for name, param in model.named_parameters():
         if param.grad is not None:
@@ -279,18 +268,9 @@ def _log_parameter_summary(model, logger, stage):
 
 
 def _test(model, logger=None, stage="Eval", cfg=None):
-    """
-    模型性能测试函数
+    """使用随机输入统计模型的 MACs、推理时间和每秒处理帧数。
 
-    使用随机输入数据对模型进行性能评估，包括：
-    - 模型FLOPS（使用torchprofile返回的MACs口径）
-    - 推理时间测量
-    - FPS（每秒帧率）计算
-
-    该函数用于评估模型的计算效率，而非训练性能。
-
-    Args:
-        model: 待测试的PyTorch模型（需支持profile_macs）
+    MACs 由 torchprofile.profile_macs 计算。
     """
     from torchprofile import profile_macs
     import warnings
@@ -681,19 +661,10 @@ def _parse_spatiotemporal_batch(batch):
 
 @CORE_FUNCTION_REGISTRY.register()
 class Function_No_Supp_Targ_5_Frame_OT(BaseFunction):
-    """
-    5帧无支持目标最优传输训练评估类
+    """基于 DCPose 训练框架实现 OTA-Pose 的训练、验证和测试。
 
-    该类是DC-Pose的核心功能类，专门用于处理5帧输入的姿态估计任务。
-    支持最优传输（Optimal Transport, OT）损失，用于衡量和优化帧间的特征匹配。
-    继承自BaseFunction，提供标准的训练/验证/测试接口。
-
-    主要特性：
-    - 5帧输入处理：当前帧 + 4个参考帧
-    - 最优传输损失支持：用于衡量热力图之间的传输成本
-    - 混合精度支持：可选FP16训练
-    - 梯度累积：支持大batch训练
-    - 可视化支持：TensorBoard和图像输出
+    支持三帧或五帧输入，结合热力图监督和可选的特征匹配损失，
+    并记录评估指标、TensorBoard 数据及可视化结果。
     """
 
     def __init__(self, cfg, **kwargs):
@@ -1130,7 +1101,6 @@ class Function_No_Supp_Targ_5_Frame_OT(BaseFunction):
                 # TensorBoard记录和可视化后处理
                 self.global_steps += 1
                 self._after_val_iter(meta["image"], preds, maxvals, vis_output_dir, center, scale)
-
 
 
         if spatial_capture is not None:

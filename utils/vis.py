@@ -7,8 +7,6 @@ import shutil
 from datasets.transforms.build import reverse_transforms
 
 
-
-
 def dir_judge(folder_path ):
     # 检查文件夹是否存在
     if not os.path.exists(folder_path):
@@ -114,7 +112,6 @@ def save_heatmaps(dict, image, target, batch_id, save_dir=None, skip_joints=None
         cv2.imwrite(os.path.join(each_dir, f'image_right.png'), image_right)
 
 
-
         for index, x in enumerate(htms_list):
             for j in range(htms_num):
                 if j in skip_joints:
@@ -126,7 +123,6 @@ def save_heatmaps(dict, image, target, batch_id, save_dir=None, skip_joints=None
                 # 应用颜色映射，这里使用 'jet' 颜色映射
                 heatmap_colormapped = cv2.applyColorMap(np.uint8(255 * heatmap_normalized.cpu().numpy()),
                                                         cv2.COLORMAP_JET)
-                # heatmap_colormapped = cv2.cvtColor(heatmap_colormapped, cv2.COLOR_BGR2RGB)  # 如果需要转换颜色空间
 
                 heatmap_colormapped = cv2.resize(heatmap_colormapped, (W, H), interpolation=cv2.INTER_LINEAR)
 

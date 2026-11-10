@@ -1,7 +1,7 @@
-"""Opt-in validation adapter for the user's 2026-10 masked pruning code.
+"""Record token selections during a full sequential validation pass.
 
-No selection, model, training, or budget changes. Only the original unflipped
-forward of a full sequential validation pass is recorded. Default is disabled.
+Set OTA_SPATIAL_EXPORT_DIR to enable recording. Capture uses the original
+unflipped forward pass.
 """
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ class SpatialCaptureSession:
             "capture": __file__,
             "exporter": inspect.getsourcefile(SpatialRetentionExporter),
         }
-        # This is the sibling actually imported by the inspected ISP implementation.
+        # Include the dynamic-pruning module alongside the coarse-branch source.
         if source_paths["isp"]:
             dynamic_source = Path(source_paths["isp"]).with_name("token_prune_dynamic.py")
             if dynamic_source.is_file():
@@ -157,8 +157,8 @@ class SpatialCaptureSession:
         if len(meta["image"]) != int(batch_size):
             raise ValueError("Metadata size differs from model input batch size")
 
-        # This is safe ONLY because the exact standard sequential sampler was checked.
-        # No dataset edit is needed and metadata passed to the original evaluator is untouched.
+        # Sequential sampling makes batch row IDs match dataset indices.
+        # Add those IDs to a copy of the evaluation metadata for export.
         row_start = self.writer.n
         row_ids = np.arange(row_start, row_start + int(batch_size), dtype=np.int64)
         if row_start + int(batch_size) > self.expected:

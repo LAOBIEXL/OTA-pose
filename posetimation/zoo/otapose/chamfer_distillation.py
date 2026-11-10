@@ -9,9 +9,8 @@ class SymmetricChamferDistillationLoss(nn.Module):
     """Hard bidirectional nearest-neighbor matching for token distillation.
 
     The pairwise cost matches the OT objective: cosine feature distance
-    plus optional normalized squared position distance. Unlike OT, each token
-    independently chooses its nearest neighbor, so the matching is many-to-one
-    and has no mass constraint.
+    plus optional normalized squared position distance. Each token independently
+    chooses its nearest neighbor, producing many-to-one matches.
     """
 
     def __init__(self, lambda_pos=0.1):

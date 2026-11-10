@@ -13,20 +13,19 @@ def cluster_dpc_knn_dynamic(
     return_debug=False,
 ):
     """
-    cluster_dpc_knn 的动态版本，唯一区别是 cluster_num 不再固定，
-    而是由统计阈值 (μ + alpha*σ) 自适应决定。
+    根据 DPC 得分阈值 μ + alpha*σ 自适应选择聚类中心。
 
     输入：
-      x          : [B, N, C]  — B 个样本，N 个 token，每个 token 维度为 C
-      alpha      : float      — 阈值系数，越大保留 token 越少
-      min_keep   : int        — 最少保留 token 数
-      max_keep   : int|None   — 最多保留 token 数，None 表示不限
-      k          : int        — 计算密度时使用的近邻数
-      token_mask : [B, N]     — 可选，1 表示有效 token，0 表示忽略
+      x          : [B, N, C]，B 个样本，N 个 token，每个 token 维度为 C
+      alpha      : float，阈值系数，越大保留 token 越少
+      min_keep   : int，最少保留 token 数
+      max_keep   : int|None，最多保留 token 数，None 表示不限
+      k          : int，计算密度时使用的近邻数
+      token_mask : [B, N]，可选，1 表示有效 token，0 表示忽略
     输出：
-      index_down : [B, K]     — 每个样本选出的 K 个聚类中心的 token 索引
-      idx_cluster: [B, N]     — 每个 token 所属聚类中心的编号（0~K-1）
-      valid_mask : [B, K]     — pad_to_batch_max=True 时返回，1 表示真实保留 token
+      index_down : [B, K]，每个样本选出的 K 个聚类中心的 token 索引
+      idx_cluster: [B, N]，每个 token 所属聚类中心的编号（0~K-1）
+      valid_mask : [B, K]，pad_to_batch_max=True 时返回，1 表示真实保留 token
     """
     with torch.no_grad():
         bsz, token_num, dim = x.shape  # B, N, C
@@ -43,8 +42,7 @@ def cluster_dpc_knn_dynamic(
         # density:      [B, N]，局部密度（越大表示周围 token 越密集）
         dist_nearest, _ = torch.topk(dist_matrix, k=k, dim=-1, largest=False)
         density = (-(dist_nearest ** 2).mean(dim=-1)).exp()
-        # Deterministic tie-break: keep equal-density tokens ordered by index
-        # without introducing run-to-run randomness.
+        # Break equal-density ties deterministically by token index.
         tie_break = torch.arange(token_num, device=x.device, dtype=density.dtype).unsqueeze(0)
         density = density + tie_break * 1e-12
 
@@ -64,7 +62,7 @@ def cluster_dpc_knn_dynamic(
 
         # mu, sigma, threshold: [B, 1]，对每个样本单独计算统计量
         # keep_counts:          [B]，每个样本中得分超过阈值的 token 数量
-        # cluster_num:          int，旧模式下 batch 内平均保留数（clamp 到 [min_keep, max_keep]）
+        # cluster_num:          int，固定长度批次的平均保留数，限制在 [min_keep, max_keep]
         mu = score.mean(dim=-1, keepdim=True)                    # [B, 1]
         sigma = score.std(dim=-1, unbiased=False, keepdim=True)  # [B, 1]
         threshold = mu + alpha * sigma                           # [B, 1]

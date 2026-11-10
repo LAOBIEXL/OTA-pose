@@ -12,7 +12,6 @@ import click
 import numpy as np
 import tqdm
 
-# from posetrack18_id2fname import posetrack18_fname2id, posetrack18_id2fname
 from .posetrack18_id2fname import posetrack18_fname2id, posetrack18_id2fname
 
 LOGGER = logging.getLogger(__name__)
@@ -298,7 +297,6 @@ class Person:
             if "is_visible" in landmark_info.keys():
                 point["is_visible"] = [landmark_info["is_visible"]]
             keypoints.append(point)
-        # ret = {"track_id": [self.track_id], "annopoints": keypoints}
         ret = {"track_id": [self.track_id], "annopoints": [{'point': keypoints}]}
         if self.rect_head:
             ret["x1"] = [self.rect_head["x1"]]
@@ -482,11 +480,10 @@ class Image:
         old_frame_id = int(fp_wo_ending)
         try:
             frame_id = posetrack18_fname2id(old_seq_fp, old_frame_id)
-        except:  # pylint: disable=bare-except
-            print("I stumbled over a strange sequence. Maybe you can have a look?")
-            import pdb
-
-            pdb.set_trace()  # pylint: disable=no-member
+        except Exception as exc:
+            raise ValueError(
+                "Cannot map PoseTrack frame {!r} to an image ID".format(posetrack_filename)
+            ) from exc
         image = Image(posetrack_filename, frame_id)
         for person_info in json_data["annorect"]:
             image.people.append(Person.from_old(person_info))
@@ -541,9 +538,7 @@ class Image:
 )
 def cli(in_fp, out_fp="converted"):
     """Convert between PoseTrack18 and PoseTrack17 format."""
-    #LOGGER.info("Converting `%s` to `%s`...", in_fp, out_fp)
     if in_fp.endswith(".zip") and path.isfile(in_fp):
-        #LOGGER.info("Unzipping...")
         import zipfile
         import tempfile
 
@@ -551,7 +546,6 @@ def cli(in_fp, out_fp="converted"):
         with zipfile.ZipFile(in_fp, "r") as zip_ref:
             zip_ref.extractall(unzip_dir)
         in_fp = unzip_dir
-        #LOGGER.info("Done.")
     else:
         unzip_dir = None
     if path.isfile(in_fp):
@@ -564,7 +558,6 @@ def cli(in_fp, out_fp="converted"):
                 if track_fp.endswith(".json")
             ]
         )
-    #LOGGER.info("Identified %d track files.", len(track_fps))
     assert path.isfile(track_fps[0]), "`%s` is not a file!" % (track_fps[0])
     with open(track_fps[0], "r") as inf:
         first_track = json.load(inf)
@@ -572,13 +565,10 @@ def cli(in_fp, out_fp="converted"):
     old_to_new = False
     if "annolist" in first_track.keys():
         old_to_new = True
-        #LOGGER.info("Detected PoseTrack17 format. Converting to 2018...")
     else:
         assert "images" in first_track.keys(), "Unknown image format. :("
-        #LOGGER.info("Detected PoseTrack18 format. Converting to 2017...")
 
     videos = []
-    #LOGGER.info("Parsing data...")
     for track_fp in tqdm.tqdm(track_fps):
         with open(track_fp, "r") as inf:
             track_data = json.load(inf)
@@ -586,7 +576,6 @@ def cli(in_fp, out_fp="converted"):
             videos.extend(Video.from_old(track_data))
         else:
             videos.extend(Video.from_new(track_data))
-    #LOGGER.info("Writing data...")
     if not path.exists(out_fp):
         os.mkdir(out_fp)
     for video in tqdm.tqdm(videos):
@@ -600,19 +589,15 @@ def cli(in_fp, out_fp="converted"):
         with open(target_fp, "w") as outf:
             json.dump(converted_json, outf, default=json_default)
     if unzip_dir:
-        #LOGGER.debug("Deleting temporary directory...")
         os.unlink(unzip_dir)
-    #LOGGER.info("Done.")
 
 def convert_videos(track_data):
     """Convert between PoseTrack18 and PoseTrack17 format."""
     if "annolist" in track_data.keys():
         old_to_new = True
-        #LOGGER.info("Detected PoseTrack17 format. Converting to 2018...")
     else:
         old_to_new = False
         assert "images" in track_data.keys(), "Unknown image format. :("
-        #LOGGER.info("Detected PoseTrack18 format. Converting to 2017...")
 
     if (old_to_new):
         videos = Video.from_old(track_data)

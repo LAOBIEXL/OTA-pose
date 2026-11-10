@@ -57,10 +57,9 @@ class OTAPose(BaseModel):
 
         self.frame_num = cfg.MODEL.FRAME_NUM
 
-        # self.multi_frame_fusion = True
 
         self.htms_dict = dict()
-        # Last forward token-keep statistics for quick inspection/debug.
+        # Token-retention statistics from the latest forward pass.
         self.token_keep_stats = dict()
         self.token_keep_history = {
             "fine_keep_tokens": [],
@@ -72,8 +71,7 @@ class OTAPose(BaseModel):
         self.backbone = ViT.get_net(cfg , phase)
 
         #细粒度剪枝：
-        # 直接使用Transformer输出(1024维)，通过反卷积上采样4倍
-        # 反卷积：将 (b×frames, 1024, H, W) → (b×frames, 1024, H×2, W×2)
+        # 对 Transformer 特征进行反卷积，将高和宽分别放大至两倍。
         self.fine_grain_deconv = nn.Sequential(
             nn.ConvTranspose2d(in_channels=cfg.MODEL.VIT.EMB_DIM,
                                out_channels=cfg.MODEL.VIT.EMB_DIM,
@@ -134,10 +132,7 @@ class OTAPose(BaseModel):
             raise ValueError("TOKEN_MATCHING_STRATEGY must be one of: 'none', 'chamfer', 'ot'")
         self.use_token_matching = self.token_matching_strategy != "none"
         self.use_ot_distillation = self.token_matching_strategy == "ot"
-        # If NO_PRUNE is True, skip only the pruning / token selection steps.
-        # The downstream blocks (fg_pruned_blocks, prune_recover_blocks, cross-attention,
-        # and multi-grain fusion) are still kept so this behaves like a "no pruning but
-        # preserve the rest of the model" baseline.
+        # NO_PRUNE passes all tokens through the feature blocks and fusion layers.
         self.no_prune = bool(getattr(extra_cfg, "NO_PRUNE", False))
         self.train_single_branch_lrb = bool(getattr(extra_cfg, "TRAIN_SINGLE_BRANCH_LRB", False))
         self.use_single_branch_loss = bool(getattr(extra_cfg, "USE_SINGLE_BRANCH_LOSS", False))
@@ -166,7 +161,7 @@ class OTAPose(BaseModel):
                     blur=self.ot_blur,
                 )
             # HRB特征维度与LRB特征维度一致时，不需要投影；否则投影到统一维度再做OT。
-            # 现在两者都是 EMB_DIM (1024)，所以使用 Identity
+            # 两个分支的特征维度均为 EMB_DIM，因此使用 Identity。
             self.ot_teacher_proj = nn.Identity()
             # 初始化last_feat_max，用于记录最后一次forward的feat_max值
             self.last_feat_max = torch.tensor(0.0)
@@ -303,8 +298,6 @@ class OTAPose(BaseModel):
         self.coarse_prune_vis = None
 
         true_batchsize , channel_num  = input.shape[0] , input.shape[1]//self.frame_num
-        # print(input.shape)
-        # print(true_batchsize , channel_num , dim)
 
         img_cat_batch= torch.cat(input.split(channel_num, dim=1), dim=0)
 
@@ -331,7 +324,7 @@ class OTAPose(BaseModel):
             # 细粒度特征剪枝（可被 NO_PRUNE 短路）
             # 细粒度分支：只处理关键帧（中间帧）
             # feats_backbone_out_cat_batch: (b * frame_num, frames_tokens, 1024)
-            # 每帧有 frames_tokens=192 个 token (16×12)
+            # 每帧 token 数由输入图像尺寸和 patch 尺寸确定。
 
             # 使用预定义的 map_size_up_1x 作为每帧的 H, W
             # map_size_up_1x = (H, W) = (IMAGE_SIZE[1]//PATCH_SIZE, IMAGE_SIZE[0]//PATCH_SIZE)
@@ -346,7 +339,7 @@ class OTAPose(BaseModel):
             # reshape: (b, Hp*Wp, C) -> (b, C, Hp, Wp)
             feats_backbone_out_curr = feats_backbone_out_keyframe.reshape(-1, Hp, Wp, feat_dim).permute(0, 3, 1, 2).contiguous()
 
-            # 反卷积上采样4倍: (b, 1024, Hp, Wp) → (b, 1024, Hp*2, Wp*2)
+            # 反卷积上采样: (b, C, Hp, Wp) → (b, C, Hp*2, Wp*2)
             feat_2x = self.fine_grain_deconv(feats_backbone_out_curr)
 
             # reshape为token格式: (b, 1024, H*2, W*2) → (b, H*2*W*2, 1024)
@@ -596,7 +589,7 @@ class OTAPose(BaseModel):
                     return out, htms_curr, ot_loss
             else:
                 if need_single_branch:
-                    # 4元素：(out, htms, 0.0, out_single_branch) — 第3位固定为ot_loss占位
+                    # 4元素：(out, htms, 0.0, out_single_branch)，第3位为ot_loss占位。
                     return out, htms_curr, out.new_zeros(()), out_single_branch
                 else:
                     # 2元素：(out, htms)

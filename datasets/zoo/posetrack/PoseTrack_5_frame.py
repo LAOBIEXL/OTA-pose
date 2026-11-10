@@ -16,7 +16,6 @@ from datasets.process import get_affine_transform, fliplr_joints, exec_affine_tr
     half_body_transform, convert_data_to_annorect_struct, dark_get_affine_transform
 from datasets.transforms import build_transforms
 from datasets.zoo.base import VideoDataset
-# from engine.defaults.constant import DATASET_REGISTRY
 
 from utils.utils_registry import DATASET_REGISTRY
 from utils.common import TRAIN_PHASE, VAL_PHASE
@@ -30,17 +29,9 @@ import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 
-# np.warnings.filterwarnings('ignore', category=np.DeprecationWarning)
-
-
-# np.warnings.filterwarnings('ignore', category=np.DeprecationWarning)
-
 @DATASET_REGISTRY.register()
 class PoseTrack_5_frame(VideoDataset):
-    """
-        PoseTrack_Temporal_Difference_Modeling
-        Similar to PoseTrackAlignment
-    """
+    """Load PoseTrack images, reference frames, and keypoint annotations."""
 
     def __init__(self, cfg, phase, **kwargs):
         super().__init__(cfg, phase, **kwargs)
@@ -56,10 +47,7 @@ class PoseTrack_5_frame(VideoDataset):
         self.is_posetrack18 = cfg.DATASET.IS_POSETRACK18
         self.transform = build_transforms(cfg, phase)
 
-        # self.distance_whole_otherwise_segment = cfg.DISTANCE_WHOLE_OTHERWISE_SEGMENT
         self.distance = cfg.DISTANCE
-        # self.previous_distance = cfg.PREVIOUS_DISTANCE
-        # self.next_distance = cfg.NEXT_DISTANCE
 
         self.random_aux_frame = cfg.DATASET.RANDOM_AUX_FRAME
 
@@ -136,7 +124,6 @@ class PoseTrack_5_frame(VideoDataset):
 
         current_idx = int(osp.basename(image_file_path).replace('.jpg', ''))
 
-        # if self.distance_whole_otherwise_segment:
         farthest_distance = self.distance
 
         prev_delta_range = range(1,
@@ -205,7 +192,6 @@ class PoseTrack_5_frame(VideoDataset):
 
             scale_factor = self.scale_factor
             rotation_factor = self.rotation_factor
-            # scale = scale * np.random.uniform(1 - scale_factor[0], 1 + scale_factor[1])
             if isinstance(scale_factor, list) or isinstance(scale_factor, tuple):
                 scale_factor = scale_factor[0]
             scale = scale * np.clip(np.random.randn() * scale_factor + 1, 1 - scale_factor, 1 + scale_factor)
@@ -224,7 +210,6 @@ class PoseTrack_5_frame(VideoDataset):
 
         # calculate transform matrix
         trans = get_affine_transform(center, scale, r, self.image_size)
-        # trans = dark_get_affine_transform(center, scale, r, self.image_size)
         input_x = cv2.warpAffine(data_numpy, trans, (int(self.image_size[0]), int(self.image_size[1])),
                                  flags=cv2.INTER_LINEAR)
 
@@ -233,13 +218,6 @@ class PoseTrack_5_frame(VideoDataset):
                                                     (int(self.image_size[0]), int(self.image_size[1])),
                                                     flags=cv2.INTER_LINEAR)
 
-        # '''
-        # test -- input data visualized
-        # '''
-        # path = '/media/Z/frunyang/global/test/visual'
-        # for index, img_data in enumerate(ref_data_numpy_list):
-        #     cv2.imwrite(path + '/' + str(index) + '.jpg', img_data)
-        # cv2.imwrite(path + '/' + '1a' + '.jpg', input_x)
 
         if self.transform:
             input_x = self.transform(input_x)
@@ -256,7 +234,6 @@ class PoseTrack_5_frame(VideoDataset):
             x, y, _ = joint
             if x < 0 or y < 0 or x > self.image_size[0] or y > self.image_size[1]:
                 joints_vis[index] = [0, 0, 0]
-        # target_heatmaps, target_heatmaps_weight = self._generate_target(joints, joints_vis, self.heatmap_size, self.num_joints)
 
         target_heatmaps, target_heatmaps_weight = generate_heatmaps(joints, joints_vis, self.sigma,
                                                                     self.image_size,
@@ -301,7 +278,6 @@ class PoseTrack_5_frame(VideoDataset):
 
         current_idx = int(osp.basename(image_file_path).replace('.jpg', ''))
 
-        # if self.distance_whole_otherwise_segment:
         farthest_distance = self.distance
 
         prev_delta_range = range(1,
@@ -387,7 +363,6 @@ class PoseTrack_5_frame(VideoDataset):
 
             scale_factor = self.scale_factor
             rotation_factor = self.rotation_factor
-            # scale = scale * np.random.uniform(1 - scale_factor[0], 1 + scale_factor[1])
             if isinstance(scale_factor, list) or isinstance(scale_factor, tuple):
                 scale_factor = scale_factor[0]
             scale = scale * np.clip(np.random.randn() * scale_factor + 1, 1 - scale_factor, 1 + scale_factor)
@@ -405,7 +380,6 @@ class PoseTrack_5_frame(VideoDataset):
                 center[0] = data_numpy.shape[1] - center[0] - 1
 
         # calculate transform matrix
-        # trans = get_affine_transform(center, scale, r, self.image_size)
         trans = dark_get_affine_transform(center, scale, r, self.image_size)
         input_x = cv2.warpAffine(data_numpy, trans, (int(self.image_size[0]), int(self.image_size[1])),
                                  flags=cv2.INTER_LINEAR)
@@ -430,7 +404,6 @@ class PoseTrack_5_frame(VideoDataset):
             x, y, _ = joint
             if x < 0 or y < 0 or x > self.image_size[0] or y > self.image_size[1]:
                 joints_vis[index] = [0, 0, 0]
-        # target_heatmaps, target_heatmaps_weight = self._generate_target(joints, joints_vis, self.heatmap_size, self.num_joints)
 
         target_heatmaps, target_heatmaps_weight = generate_heatmaps(joints, joints_vis, self.sigma,
                                                                     self.image_size,
@@ -499,7 +472,6 @@ class PoseTrack_5_frame(VideoDataset):
 
         ref_x_list = []
 
-        # path = '/media/Z/frunyang/global/test/visual'
 
         for ref_item_id in ref_item_ids:
             ref_data_item = self.data[ref_item_id]
@@ -513,13 +485,10 @@ class PoseTrack_5_frame(VideoDataset):
             trans = get_affine_transform(center, scale, r, self.image_size)
             ref_x = cv2.warpAffine(data_numpy, trans, (int(self.image_size[0]), int(self.image_size[1])),
                                    flags=cv2.INTER_LINEAR)
-            # cv2.imwrite(path + '/gloablref_' + str(ref_item_id) + '.jpg',ref_x)
             if self.transform:
                 ref_x = self.transform(ref_x)
             ref_x_list.append(ref_x)
 
-        # for idx, ref_x in enumerate(ref_x_list):
-        #     cv2.imwrite(path + '/' + 'global_' + str(idx) + '.jpg',ref_x)
 
         ref_images = torch.cat(ref_x_list, dim=0)
 
@@ -558,7 +527,6 @@ class PoseTrack_5_frame(VideoDataset):
 
             scale_factor = self.scale_factor
             rotation_factor = self.rotation_factor
-            # scale = scale * np.random.uniform(1 - scale_factor[0], 1 + scale_factor[1])
             if isinstance(scale_factor, list) or isinstance(scale_factor, tuple):
                 scale_factor = scale_factor[0]
             scale = scale * np.clip(np.random.randn() * scale_factor + 1, 1 - scale_factor, 1 + scale_factor)
@@ -573,7 +541,6 @@ class PoseTrack_5_frame(VideoDataset):
                 center[0] = data_numpy.shape[1] - center[0] - 1
 
         # calculate transform matrix
-        # trans = get_affine_transform(center, scale, r, self.image_size)
         trans = dark_get_affine_transform(center, scale, r, self.image_size)
         input_x = cv2.warpAffine(data_numpy, trans, (int(self.image_size[0]), int(self.image_size[1])),
                                  flags=cv2.INTER_LINEAR)
@@ -628,7 +595,6 @@ class PoseTrack_5_frame(VideoDataset):
         for item_index, item in enumerate(data):
             video_name = item['video_name']
             frame_id = item['frame_id']
-            # if video_name not in
             if video_name not in video_image_index.keys():
                 video_image_index[video_name] = defaultdict(list)
             video_image_index[video_name][frame_id].append(item_index)
@@ -862,8 +828,6 @@ class PoseTrack_5_frame(VideoDataset):
                 'frame_id': frame_id,
                 'video_name': "/".join(img_name.split('/')[:-1]),
             })
-        # logger.info('=> Total boxes: {}'.format(len(all_boxes)))
-        # logger.info('=> Total boxes after filter low score@{}: {}'.format(self.image_thre, num_boxes))
 
         table_header = ["Total boxes", "Filter threshold", "Remaining boxes"]
         table_data = [[len(all_boxes), self.image_thre, num_boxes]]
@@ -892,11 +856,9 @@ class PoseTrack_5_frame(VideoDataset):
         all_tracks = []
         cc = 0
 
-        # print(img_path)
         for key in img_path:
             temp = key.split('/')
 
-            # video_name = osp.dirname(key)
             video_name = temp[len(temp) - 3] + '/' + temp[len(temp) - 2]
             img_sfx = temp[len(temp) - 3] + '/' + temp[len(temp) - 2] + '/' + temp[len(temp) - 1]
 
@@ -988,7 +950,6 @@ class PoseTrack_5_frame(VideoDataset):
                     kps = temp_kps_map[frame_num][1]
                     bboxs = temp_box_map[frame_num]
                     tracks = [track_id for track_id in range(len(kps))]
-                    # tracks = [1] * len(kps)
 
                 ### creating a data element
                 data_el = {
@@ -1010,7 +971,6 @@ class PoseTrack_5_frame(VideoDataset):
             write_json_to_file({'annolist': vdata}, outfpath)
 
         # run evaluation
-        # AP = self._run_eval(annot_dir, output_dir)[0]
         AP = evaluate_simple.evaluate(annot_dir, output_dir, eval_track=False)[0]
 
         name_value = [
@@ -1047,19 +1007,3 @@ class PoseTrack_5_frame(VideoDataset):
                 img_box[img]['box'].append(box)
                 img_box[img]['pose'].append(joints)
         return img_box
-
-    # def _vis_hook(self, vis_output_dir):
-    #     from engine.core.utils.vis_helper import draw_skeleton_in_origin_image
-    #     from tqdm.auto import tqdm
-    #     # for name, value in self.img_pose_data.items():
-    #     for name in tqdm(self.img_pose_data.keys()):
-    #         image = name
-    #         value = self.img_pose_data[name]
-    #         batch_box = np.concatenate(
-    #             [np.expand_dims(box, 0) for box in np.array(value['box']) if True][:], 0)
-    #         batch_pose = np.concatenate(
-    #             [np.expand_dims(pose, 0) for pose in np.array(value['pose']) if True][:], 0)
-    #
-    #         draw_skeleton_in_origin_image([image], batch_pose, batch_box, vis_output_dir,
-    #                                       vis_skeleton=True, vis_bbox=True,
-    #                                       sure_threshold=0.0)

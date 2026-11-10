@@ -6,7 +6,6 @@ from datasets.zoo.posetrack import PoseTrack_Official_Keypoint_Ordering, PoseTra
 
 
 def coco2posetrack_ord(preds, global_score=1):
-    # print(xy)
     data = []
     src_kps = PoseTrack_COCO_Keypoint_Ordering
     dst_kps = PoseTrack_Official_Keypoint_Ordering
@@ -14,36 +13,27 @@ def coco2posetrack_ord(preds, global_score=1):
     global_score = float(global_score)
     dstK = len(dst_kps)
     for k in range(dstK):
-        # print(k,dst_kps[k])
-
         if dst_kps[k] in src_kps:
             ind = src_kps.index(dst_kps[k])
             local_score = (preds[2, ind] + preds[2, ind]) / 2.0
-            # conf = global_score
             conf = local_score * global_score
-            # if local_score >= cfg.EVAL.EVAL_MPII_KPT_THRESHOLD:
-            if True:
-                data.append({'id': [k],
-                             'x': [float(preds[0, ind])],
-                             'y': [float(preds[1, ind])],
-                             'score': [conf]})
+            data.append({'id': [k],
+                         'x': [float(preds[0, ind])],
+                         'y': [float(preds[1, ind])],
+                         'score': [conf]})
         elif dst_kps[k] == 'neck':
             rsho = src_kps.index('right_shoulder')
             lsho = src_kps.index('left_shoulder')
             x_msho = (preds[0, rsho] + preds[0, lsho]) / 2.0
             y_msho = (preds[1, rsho] + preds[1, lsho]) / 2.0
             local_score = (preds[2, rsho] + preds[2, lsho]) / 2.0
-            # conf_msho = global_score
             conf_msho = local_score * global_score
 
-            # if local_score >= cfg.EVAL.EVAL_MPII_KPT_THRESHOLD:
-            if True:
-                data.append({'id': [k],
-                             'x': [float(x_msho)],
-                             'y': [float(y_msho)],
-                             'score': [conf_msho]})
+            data.append({'id': [k],
+                         'x': [float(x_msho)],
+                         'y': [float(y_msho)],
+                         'score': [conf_msho]})
         elif dst_kps[k] == 'head_top':
-            # print(xy)
             rsho = src_kps.index('right_shoulder')
             lsho = src_kps.index('left_shoulder')
 
@@ -56,14 +46,11 @@ def coco2posetrack_ord(preds, global_score=1):
             x_tophead = x_nose - (x_msho - x_nose)
             y_tophead = y_nose - (y_msho - y_nose)
             local_score = (preds[2, rsho] + preds[2, lsho]) / 2.0
-            #
-            # if local_score >= cfg.EVAL.EVAL_MPII_KPT_THRESHOLD:
-            if True:
-                data.append({
-                    'id': [k],
-                    'x': [float(x_tophead)],
-                    'y': [float(y_tophead)],
-                    'score': [local_score]})
+            data.append({
+                'id': [k],
+                'x': [float(x_tophead)],
+                'y': [float(y_tophead)],
+                'score': [local_score]})
     return data
 
 
@@ -98,7 +85,6 @@ def coco2posetrack_ord_infer(pose, global_score=1, output_posetrack_format=False
             local_score = (pose[rsho, 2] + pose[lsho, 2]) / 2.0
             conf_msho = local_score * global_score
 
-            # if local_score >= cfg.EVAL.EVAL_MPII_KPT_THRESHOLD:
             if not output_posetrack_format:
                 data[dst_index, 0] = float(x_msho)
                 data[dst_index, 1] = float(y_msho)
@@ -110,7 +96,6 @@ def coco2posetrack_ord_infer(pose, global_score=1, output_posetrack_format=False
                              'score': [conf_msho]})
 
         elif posetrack_keypoint_name == 'head_top':
-            # print(xy)
             rsho = src_kps.index('right_shoulder')
             lsho = src_kps.index('left_shoulder')
 

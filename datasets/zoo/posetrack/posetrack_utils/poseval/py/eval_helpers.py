@@ -132,7 +132,6 @@ def getCum(vals):
     cum = [];
     n = -1
     cum += [(vals[[Joint().head_top, Joint().neck, Joint().nose], 0].mean())]
-    # cum += [(vals[[Joint().neck],0].mean())]
 
     cum += [(vals[[Joint().right_shoulder, Joint().left_shoulder], 0].mean())]
     cum += [(vals[[Joint().right_elbow, Joint().left_elbow], 0].mean())]
@@ -163,18 +162,9 @@ def printTable(vals, motHeader=False):
         header = getMotHeader()
     else:
         header = getHeader()
-        # header = ["Head", "Shou", "Elb", "Wri", "Hip", "Knee", "Ankl", "# Total"]
 
-    # result = []
-    # for item in cum:
-    # result.append(item)
-    # table = tabulate([result], tablefmt="pipe", headers=header, numalign="left",)
-    # logger = logging.getLogger(__name__)
-    # print()
-    # logger.info(f"=> Result Table: \n" + colored(table, "magenta"))
     print(header)
     print(row)
-    # return header+"\n", row+"\n"
     return cum
 
 
@@ -259,7 +249,6 @@ def process_arguments(argv):
 def process_arguments_server(argv):
     mode = 'multi'
 
-    print(len(argv))
     assert len(argv) == 10, "Wrong number of arguments"
 
     gt_dir = argv[1]
@@ -392,7 +381,6 @@ def load_data_dir(argv):
 
     for i in range(len(filenames)):
         # load each annotation json file
-        # print('GT:')
         with open(filenames[i]) as data_file:
             data = json.load(data_file)
         if (not "annolist" in data):
@@ -404,21 +392,16 @@ def load_data_dir(argv):
             for ridxGT in range(len(gt[imgidx]["annorect"])):
                 if ("track_id" in gt[imgidx]["annorect"][ridxGT].keys()):
                     # adjust track_ids to make them unique across all sequences
-                    #                print(os.path.basename(filenames[i]).split('.')[0])
-                    #                print(gt[imgidx]["annorect"][ridxGT]["track_id"][0])
                     assert (gt[imgidx]["annorect"][ridxGT]["track_id"][0] < MAX_TRACK_ID)
                     gt[imgidx]["annorect"][ridxGT]["track_id"][0] += i * MAX_TRACK_ID
         gtFramesAll += gt
         gtBasename = os.path.basename(filenames[i])
-        # predFilename = pred_dir + gtBasename
         predFilename = os.path.join(pred_dir, gtBasename)
-        # print(xy)
 
         if (not os.path.exists(predFilename)):
             raise IOError('Prediction file ' + predFilename + ' does not exist')
 
         # load predictions
-        #    print('PRED:')
         with open(predFilename) as data_file:
             data = json.load(data_file)
         if (not "annolist" in data):
@@ -430,12 +413,9 @@ def load_data_dir(argv):
             for ridxPr in range(len(pr[imgidx]["annorect"])):
                 if ("track_id" in pr[imgidx]["annorect"][ridxPr].keys()):
                     # adjust track_ids to make them unique across all sequences
-                    #                print(os.path.basename(filenames[i]).split('.')[0])
-                    #                print(pr[imgidx]["annorect"][ridxPr]["track_id"][0])
                     assert (pr[imgidx]["annorect"][ridxPr]["track_id"][0] < MAX_TRACK_ID)
                     pr[imgidx]["annorect"][ridxPr]["track_id"][0] += i * MAX_TRACK_ID
         prFramesAll += pr
-    #    print(xy)
 
     gtFramesAll, prFramesAll = cleanupData(gtFramesAll, prFramesAll)
 

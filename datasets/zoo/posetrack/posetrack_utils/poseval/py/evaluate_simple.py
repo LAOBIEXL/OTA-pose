@@ -27,13 +27,10 @@ def evaluate(gtdir, preddir, eval_pose=True, eval_track=True,
         apAll, preAll, recAll = evaluateAP(gtFramesAll, prFramesAll)
 
     logger.info('Average Precision (AP) metric:')
-    # printTable(apAll)
     cum = printTable(apAll)
 
     metrics = np.full((Joint().count + 4, 1), np.nan)
-    # print(eval_track)
     if eval_track:
-        # print(xy)
         metricsAll = evaluateTracking(
             gtFramesAll, prFramesAll, eval_upper_bound)
 
@@ -43,8 +40,5 @@ def evaluate(gtdir, preddir, eval_pose=True, eval_track=True,
         metrics[Joint().count + 2, 0] = metricsAll['pre'][0, Joint().count]
         metrics[Joint().count + 3, 0] = metricsAll['rec'][0, Joint().count]
         logger.info('Multiple Object Tracking (MOT) mmetrics:')
-        # print('Multiple Object Tracking (MOT) mmetrics:')
         track_cum = printTable(metrics, motHeader=True)
-    # return (apAll, preAll, recAll), metrics
-    # print(xy)
     return cum, track_cum

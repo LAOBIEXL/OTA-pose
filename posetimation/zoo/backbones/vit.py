@@ -13,9 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from torch import Tensor
-# from timm.models.layers import drop_path, to_2tuple, trunc_normal_
-
-# from .base_backbone import BaseBackbone
 
 
 def strip_prefix(state_dict, prefix):
@@ -27,22 +24,16 @@ def strip_prefix(state_dict, prefix):
     return new_state_dict
 
 
-
-
 def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    """Apply stochastic depth independently to each sample in a residual branch.
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
-
+    Implementation discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956
     """
     if drop_prob == 0. or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # Broadcast across all non-batch dimensions.
     random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
@@ -63,7 +54,7 @@ to_4tuple = _ntuple(4)
 to_ntuple = _ntuple
 
 def _trunc_normal_(tensor, mean, std, a, b):
-    # Cut & paste from PyTorch official master until it's in a few official releases - RW
+    # PyTorch truncated-normal initialization (RW).
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
@@ -206,7 +197,7 @@ class Block(nn.Module):
             attn_drop=attn_drop, proj_drop=drop, attn_head_dim=attn_head_dim
             )
 
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        # Apply stochastic depth to the residual branch.
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
@@ -232,7 +223,6 @@ class PatchEmbed(nn.Module):
         self.patch_size = patch_size
         self.num_patches = num_patches
 
-        # self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=(patch_size[0] // ratio), padding=4 + 2 * (ratio//2-1))
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=(patch_size[0] // ratio), padding= 0)
 
     def forward(self, x, **kwargs):
@@ -326,7 +316,6 @@ class ViT(nn.Module):
             trunc_normal_(self.pos_embed, std=.02)
 
 
-
         self.deconv_layers = nn.ModuleList([
                         nn.ConvTranspose2d(in_channels=cfg.MODEL.VIT.DECONV1_IN_CHN, out_channels=cfg.MODEL.VIT.DECONV1_OUT_CHN, kernel_size=4, stride=2, padding=1,
                                            output_padding=0, bias=False),
@@ -349,7 +338,6 @@ class ViT(nn.Module):
 
 
         self.final_layer = final_layer[0]
-
 
 
     def freeze_weight(self):
@@ -405,7 +393,6 @@ class ViT(nn.Module):
         x, (Hp, Wp) = self.patch_embed(x)
 
 
-
         if self.pos_embed is not None:
             # fit for multiple GPU training
             # since the first element for pos embed (sin-cos manner) is zero, it will cause no difference
@@ -433,13 +420,11 @@ class ViT(nn.Module):
         out = self.final_layer(xp_up_2)
 
 
-
         return out , x , xp_up_1 , xp_up_2
 
     def forward(self, x):
         y = self.forward_features(x)
         return y
-
 
 
     @classmethod

@@ -13,31 +13,23 @@ from einops import rearrange
 from torch import nn, einsum
 
 
-
-
-
-
 def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    """Apply stochastic depth independently to each sample in a residual branch.
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
-
+    Implementation discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956
     """
     if drop_prob == 0. or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # Broadcast across all non-batch dimensions.
     random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
     return x * random_tensor
 
 def _trunc_normal_(tensor, mean, std, a, b):
-    # Cut & paste from PyTorch official master until it's in a few official releases - RW
+    # PyTorch truncated-normal initialization (RW).
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
@@ -136,7 +128,6 @@ class SiLU(nn.Module):  # export-friendly version of nn.SiLU()
         return x * torch.sigmoid(x)
 
 
-
 class CrossAttention(nn.Module):
     def __init__(self, q_dim, kv_dim , heads=16, dim_head=None , dropout = 0.0):
         super().__init__()
@@ -169,7 +160,6 @@ class CrossAttention(nn.Module):
 
         sim = einsum("b h i d, b h j d -> b h i j", q, k)
         sim = sim - torch.max(sim, dim=-1, keepdim=True)[0].detach()
-        # sim = sim - sim.amax(dim=-1, keepdim=True).detach()
         if attn_mask is not None:
             sim = sim.masked_fill(attn_mask.to(torch.bool) == 0, float("-inf"))  # 将mask为0的位置填充为负无穷，使得softmax后为0
         attn = sim.softmax(dim=-1)
@@ -192,7 +182,7 @@ class CrossBlock(nn.Module):
         self.norm1 = norm_layer(dim)
         self.cross_attn = CrossAttention(dim, kv_dim , heads=num_heads, dim_head=attn_head_dim , dropout = attn_drop)
 
-        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        # Apply stochastic depth to the residual branch.
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
         self.norm2 = norm_layer(dim)
@@ -208,6 +198,3 @@ class CrossBlock(nn.Module):
 
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
-
-
-
