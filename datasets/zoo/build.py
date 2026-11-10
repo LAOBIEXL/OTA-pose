@@ -17,7 +17,6 @@ def get_dataset_name(cfg):
     return dataset_name
 
 
-# TODO Change to dataloader distributed in the future
 # for train loader
 def build_train_loader(cfg, **kwargs):
     cfg = cfg.clone()

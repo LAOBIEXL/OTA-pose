@@ -40,7 +40,7 @@ def get_all_checkpoints(checkpoint_save_folder):
 
 
 def save_checkpoint(epoch, save_folder, model, optimizer, lr_scheduler=None, **kwargs):
-    """Save checkpoint with atomic write and cleanup of old files."""
+    """Save model, optimizer, and scheduler state through a temporary file."""
     logger = logging.getLogger(__name__)
     # 统一把 checkpoint 保存成 epoch_x_state.pth。
     model_save_path = osp.join(save_folder, 'epoch_{}_state.pth'.format(epoch))
@@ -64,7 +64,7 @@ def save_checkpoint(epoch, save_folder, model, optimizer, lr_scheduler=None, **k
         checkpoint_dict['lr_scheduler'] = lr_scheduler.state_dict()
     # 保存 tensorboard 全局步数。
     checkpoint_dict['tensorboard_global_steps'] = kwargs.get("global_steps", 0)
-    
+
     # Atomic write: save to temp file, then rename
     # 先写到临时文件，避免保存一半中断导致文件损坏。
     temp_fd, temp_path = tempfile.mkstemp(suffix='.pth', dir=save_folder, text=False)
@@ -87,23 +87,18 @@ def save_checkpoint(epoch, save_folder, model, optimizer, lr_scheduler=None, **k
             except:
                 pass
         raise
-    
+
 
     return model_save_path
-
-
-def _cleanup_old_checkpoints(save_folder, keep_count=3, logger=None):
-    """No-op: keep all checkpoint files."""
-    return
 
 
 def resume(model, optimizer, checkpoint_file, lr_scheduler=None, **kwargs):
     """Resume training from checkpoint with graceful degradation on load failure."""
     logger = logging.getLogger(__name__)
-    
+
     ext_dict = {}
     begin_epoch = 0
-    
+
     try:
         # 读取 checkpoint。
         checkpoint = torch.load(checkpoint_file)
@@ -117,24 +112,9 @@ def resume(model, optimizer, checkpoint_file, lr_scheduler=None, **kwargs):
             else:
                 new_key = k
             state_dict[new_key] = v
-        
-        # 检测 checkpoint 是否包含 LoRA 结构
-        has_lora_in_checkpoint = any('lora_A' in k or 'lora_B' in k for k in state_dict.keys())
-        # 检测当前模型是否包含 LoRA 结构
-        model_keys = set(model.state_dict().keys())
-        has_lora_in_model = any('lora_A' in k or 'lora_B' in k for k in model_keys)
-        
-        # 仅当 checkpoint 与模型 LoRA 结构不一致时使用 strict=False；否则严格匹配，避免静默部分加载
-        if has_lora_in_checkpoint != has_lora_in_model:
-            logger.warning("=> LoRA structure mismatch between checkpoint and model. Using strict=False to load.")
-            missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-            if missing_keys:
-                logger.warning(f"=> Missing keys (will use default/pretrained): {len(missing_keys)} keys")
-            if unexpected_keys:
-                logger.warning(f"=> Unexpected keys (will be ignored): {len(unexpected_keys)} keys")
-        else:
-            model.load_state_dict(state_dict, strict=True)
-        
+
+        model.load_state_dict(state_dict, strict=True)
+
         # 恢复优化器状态。
         optimizer.load_state_dict(checkpoint['optimizer'])
 
@@ -162,7 +142,7 @@ def resume(model, optimizer, checkpoint_file, lr_scheduler=None, **kwargs):
         # 恢复 tensorboard 的全局步数。
         ext_dict["tensorboard_global_steps"] = checkpoint.get("tensorboard_global_steps", 0)
         logger.info(f"=> Successfully loaded checkpoint from {checkpoint_file}")
-    
+
     except (EOFError, RuntimeError, pickle.UnpicklingError) as e:
         logger.warning(f"=> Failed to load checkpoint {checkpoint_file}: {type(e).__name__}: {e}")
         logger.warning("=> Will skip resume and start from scratch with begin_epoch=0")

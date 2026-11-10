@@ -34,7 +34,7 @@ def get_cfg(args) -> CfgNode:
     """
         Get a copy of the default config.
         Returns:
-            a fastreid CfgNode instance.
+            A CfgNode instance with the OTA-Pose defaults.
     """
 
     from .defaults import _C

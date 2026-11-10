@@ -9,9 +9,9 @@ DISTANCE: 3
 
 DATASET:
   NAME: "PoseTrack_5_frame"
-  JSON_DIR: "to/your/path/DcPose_supp_files/posetrack21_json_files"
-  IMG_DIR: "to/your/path/Dataset/PoseTrack2021"
-  TEST_IMG_DIR: "to/your/path/Dataset/PoseTrack2021"
+  JSON_DIR: "./DcPose_supp_files/posetrack21_json_files"
+  IMG_DIR: "./Dataset/PoseTrack2021"
+  TEST_IMG_DIR: "./Dataset/PoseTrack2021"
   IS_POSETRACK18: true
   COLOR_RGB: true
   DATASET: 'posetrack'
@@ -30,7 +30,7 @@ MODEL:
   INIT_WEIGHTS: true
 
   NUM_JOINTS: 17
-  PRETRAINED: 'to/your/path/PRETRAINED'
+  PRETRAINED: './pretrained/ViTPose-L-weight.pth'
   TARGET_TYPE: gaussian
   IMAGE_SIZE:
     - 192
@@ -54,8 +54,8 @@ TRAIN:
   NESTEROV: false
 
 VAL:
-  ANNOT_DIR: 'to/your/path/DcPose_supp_files/posetrack21_annotation_dirs/val/'
-  COCO_BBOX_FILE: 'to/your/path/DcPose_supp_files/posetrack21_precomputed_boxes/val_boxes.json'
+  ANNOT_DIR: './DcPose_supp_files/posetrack21_annotation_dirs/val/'
+  COCO_BBOX_FILE: './DcPose_supp_files/posetrack21_precomputed_boxes/val_boxes.json'
   USE_GT_BBOX: false
   BBOX_THRE: 1.0
   IMAGE_THRE: 0.2
@@ -66,8 +66,8 @@ VAL:
   POST_PROCESS: true
 
 TEST:
-  ANNOT_DIR: 'to/your/path/DcPose_supp_files/posetrack21_annotation_dirs/test'
-  COCO_BBOX_FILE: 'to/your/path/DcPose_supp_files/posetrack21_precomputed_boxes/test_boxes.json'
+  ANNOT_DIR: './DcPose_supp_files/posetrack21_annotation_dirs/test'
+  COCO_BBOX_FILE: './DcPose_supp_files/posetrack21_precomputed_boxes/test_boxes.json'
   USE_GT_BBOX: false
   BBOX_THRE: 1.0
   IMAGE_THRE: 0.2

@@ -29,17 +29,11 @@ class DefaultEvaluator(BaseExecutor):
         self.distributed = kwargs.get("distributed", False)
         self.rank = kwargs.get("rank", 0)
         self.local_rank = kwargs.get("local_rank", 0)
-        
-        # 检查 LoRA 配置
+
         logger = logging.getLogger(__name__)
-        use_lora = getattr(cfg.MODEL, 'USE_LORA', False)
-        if use_lora:
-            logger.info(f"=> Building model with LoRA: r={cfg.MODEL.LORA_R}, alpha={cfg.MODEL.LORA_ALPHA}, targets={cfg.MODEL.LORA_TARGET_MODULES}")
-        else:
-            logger.info("=> Building model without LoRA")
         logger.info("Set the random seed to {}".format(cfg.SEED))
         set_random_seed(cfg.SEED)
-        
+
         self.dataloader = build_eval_loader(cfg, phase)
         self.model = build_model(cfg, phase=phase)
         self.dataset = self.dataloader.dataset
@@ -51,7 +45,6 @@ class DefaultEvaluator(BaseExecutor):
         self.evaluate_model_state_files = []
         self.list_evaluate_model_files(cfg, phase)
         self.core_function = build_core_function(cfg, phase=phase, **kwargs)
-        # self.core_function = build_core_function(cfg, PE_name=kwargs.get("PE_Name", "DcPose"), phase=phase,**kwargs)
 
         self.tb_writer_dict = {"writer": SummaryWriter(self.tb_save_folder),
                                "global_steps": 0}
@@ -64,7 +57,6 @@ class DefaultEvaluator(BaseExecutor):
             else:
                 model_state_file = osp.join(self.cfg.ROOT_DIR, subCfgNode.MODEL_FILE)
 
-            # model_state_file = osp.abspath(osp.join(cfg.ROOT_DIR, subCfgNode.MODEL_FILE))
             self.evaluate_model_state_files.append(model_state_file)
         else:
             if self.eval_from_checkpoint_id == -1:
@@ -91,7 +83,6 @@ class DefaultEvaluator(BaseExecutor):
         logger = logging.getLogger(__name__)
         logger.info("=> loading checkpoints from {}".format(checkpoints_file))
         checkpoint_dict = torch.load(checkpoints_file)
-        # epoch = checkpoint_dict['begin_epoch']
         epoch = checkpoint_dict.get("begin_epoch", "0")
         model = self.model
 
@@ -101,36 +92,7 @@ class DefaultEvaluator(BaseExecutor):
         else:
             model_state_dict = checkpoint_dict
 
-        if self.PE_Name == 'MSRA':
-            model_state_dict = {k.replace('rough_pose_estimation_net.', ''): v for k, v in model_state_dict.items()}
-        
-        # 检测 checkpoint 是否包含 LoRA 结构
-        has_lora_in_checkpoint = any('lora_A' in k or 'lora_B' in k for k in model_state_dict.keys())
-        # 检测当前模型是否包含 LoRA 结构
-        model_keys = set(model.state_dict().keys())
-        has_lora_in_model = any('lora_A' in k or 'lora_B' in k for k in model_keys)
-        
-        logger.info(f"=> Checkpoint has LoRA: {has_lora_in_checkpoint}, Model has LoRA: {has_lora_in_model}")
-        logger.info(f"=> Checkpoint keys count: {len(model_state_dict)}, Model keys count: {len(model_keys)}")
-        
-        # 仅当 checkpoint 与模型 LoRA 结构不一致时使用 strict=False，否则必须严格匹配，避免静默部分加载
-        if has_lora_in_checkpoint != has_lora_in_model:
-            logger.warning("=> LoRA structure mismatch between checkpoint and model. Using strict=False to load.")
-            logger.warning(f"=> This usually means the config MODEL.USE_LORA doesn't match between training and validation.")
-            missing_keys, unexpected_keys = model.load_state_dict(model_state_dict, strict=False)
-            if missing_keys:
-                logger.warning(f"=> Missing keys (will use default/pretrained): {len(missing_keys)} keys")
-                missing_samples = [k for k in missing_keys if 'qkv' in k or 'proj' in k][:5]
-                if missing_samples:
-                    logger.warning(f"   Sample missing keys: {missing_samples}")
-            if unexpected_keys:
-                logger.warning(f"=> Unexpected keys (will be ignored): {len(unexpected_keys)} keys")
-                unexpected_samples = [k for k in unexpected_keys if 'lora' in k.lower()][:5]
-                if unexpected_samples:
-                    logger.warning(f"   Sample unexpected keys: {unexpected_samples}")
-        else:
-            # 结构一致时用 strict=True，确保完整加载，避免 LoRA 改动引入的静默错误
-            model.load_state_dict(model_state_dict, strict=True)
+        model.load_state_dict(model_state_dict, strict=True)
         if self.distributed:
             model = model.cuda(self.local_rank)
         elif len(self.GPUS) > 1:

@@ -7,7 +7,7 @@ import argparse
 def default_parse_args():
     parser = argparse.ArgumentParser(description='Train keypoints network')
     parser.add_argument('--cfg', help='experiment configure file name', type=str, required=True)
-    parser.add_argument('--PE_Name', type=str, default='SLDPOSE')
+    parser.add_argument('--PE_Name', type=str, default='OTAPOSE')
     parser.add_argument('--train', action='store_true', default=False)
     parser.add_argument('--val', action='store_true', default=False)
     parser.add_argument('--val_from_checkpoint',

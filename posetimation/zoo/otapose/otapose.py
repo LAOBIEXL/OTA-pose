@@ -1,59 +1,30 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import torch
-import torch.nn as nn
+"""OTA-Pose with adaptive token pruning and cross-branch distillation."""
 import logging
-from collections import OrderedDict
-
-from ..base import BaseModel
-
-import time
-import logging
-import os
 import math
-import random
-from functools import partial
-
-from typing import List
-from collections import namedtuple
 
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
-import numpy as np
 
-
-from ..backbones.vit_v1 import ViT_V1 , PatchEmbed , trunc_normal_
-from utils.common import TRAIN_PHASE
 from utils.utils_registry import MODEL_REGISTRY
+from posetimation.layers import CHAIN_RSB_BLOCKS
 from ..base import BaseModel
-from ..backbones.vit import Block , trunc_normal_
-from ..layers.block_zoo import *
-from .token_prune_pose import *
+from ..backbones.vit import ViT
+from ..layers.corss_block import CrossBlock
+from .token_prune_pose import Block, Model, cluster_dpc_knn, compute_temporal_redundancy_stats
 from .token_prune_dynamic import cluster_dpc_knn_dynamic
-from .ot_distillation import OTDistillationLoss as OTDistillationLossV1
-from .ot_distillation_v2 import OTDistillationLoss as OTDistillationLossV2
-from .ot_distillation_v3 import OTDistillationLoss as OTDistillationLossV3
+from .ot_distillation import OTDistillationLoss
 from .chamfer_distillation import SymmetricChamferDistillationLoss
-# from utils.vis import vis_htms
-from posetimation.layers import CHAIN_RSB_BLOCKS,ChainOfBasicBlocks
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["OTAPose"]
-
 
 class ModelArgs:
     st_layers: int = 2
     middle_layers: int = 2
 
-
     def __post_init__(self):
         pass
-
-
-
 
 @MODEL_REGISTRY.register()
 class OTAPose(BaseModel):
@@ -77,8 +48,6 @@ class OTAPose(BaseModel):
         self.num_joints = cfg.MODEL.NUM_JOINTS
         self.heatmap_h = cfg.MODEL.HEATMAP_SIZE[1]
         self.heatmap_w = cfg.MODEL.HEATMAP_SIZE[0]
-        self.use_supp_targ_num = cfg.MODEL.USE_SUPP_TARG_NUM
-        self.use_supp_direct = cfg.MODEL.USE_SUPP_DIRECT
         self.freeze_backbone_weights = cfg.MODEL.FREEZE_BACKBONE_WEIGHTS
         self.token_num = int((cfg.MODEL.IMAGE_SIZE[1] / cfg.MODEL.VIT.PATCH_SIZE) * (
                 cfg.MODEL.IMAGE_SIZE[0] / cfg.MODEL.VIT.PATCH_SIZE))
@@ -90,7 +59,6 @@ class OTAPose(BaseModel):
 
         # self.multi_frame_fusion = True
 
-
         self.htms_dict = dict()
         # Last forward token-keep statistics for quick inspection/debug.
         self.token_keep_stats = dict()
@@ -101,15 +69,14 @@ class OTAPose(BaseModel):
             "coarse_keep_ratio": [],
         }
 
-
-        self.backbone = ViT_V1.get_net(cfg , phase)
+        self.backbone = ViT.get_net(cfg , phase)
 
         #细粒度剪枝：
         # 直接使用Transformer输出(1024维)，通过反卷积上采样4倍
         # 反卷积：将 (b×frames, 1024, H, W) → (b×frames, 1024, H×2, W×2)
         self.fine_grain_deconv = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=cfg.MODEL.VIT.EMB_DIM, 
-                               out_channels=cfg.MODEL.VIT.EMB_DIM, 
+            nn.ConvTranspose2d(in_channels=cfg.MODEL.VIT.EMB_DIM,
+                               out_channels=cfg.MODEL.VIT.EMB_DIM,
                                kernel_size=4, stride=2, padding=1,
                                output_padding=0, bias=False),
             nn.BatchNorm2d(cfg.MODEL.VIT.EMB_DIM),
@@ -123,8 +90,6 @@ class OTAPose(BaseModel):
             for i in range(2)])
         self.fg_pruned_norm  = nn.LayerNorm(cfg.MODEL.VIT.EMB_DIM)
 
-
-
         #粗粒度剪枝+恢复
         self.add_pos_emb = cfg.MODEL.EXTRA.ADD_POS_EMB
         self.pos_emb_list = nn.ParameterList()
@@ -134,18 +99,6 @@ class OTAPose(BaseModel):
                 nn.init.trunc_normal_(pos_emb, std=0.02)
                 self.pos_emb_list.append(pos_emb)
 
-
-        #先 no recvoer ，也没有final fusion ，prune_ratio = 3(貌似训不动)
-        #use recover 没有 final fusion ， prune_ratio = 3 ， 多帧fusion (依旧训不动)
-        #先 no recvoer ，但是加上final fusion ，prune_ratio = 3(87.88)
-        # v1.1:再 use recover , 也加上fusion final ， prune_ratio = 3 , 先试试多帧fusion(87.93)；v1.2: 再试试多帧不fusion（88.06）说明不能fusion多帧啊
-        # v2: 加上细粒度分支，32*24的特征图进行flatten，只聚类不恢复，然后把结果给粗粒度去cross,即粗粒度为q，细粒度为kv，这一版是多帧fusion了 (87.94)
-        # v3：上面v2相同，只是现在使用多帧不fusion ，看看到底要不要多帧fusion （88.0066） 结果证明，不需要多帧fusion
-        # v4:双分支，不fusion， v4.1:细粒度prune_ratio = 5 粗粒度-3 （87.95） ; v4.2: 细粒度-3，粗粒度-5 (88.03)； v4.3 : 粗粒度-5，细粒度5
-        # v5.1:细粒度-2，粗粒度-3 ； v5.2：细粒度-3，粗粒度-2； v5.3：细粒度-2，粗粒度-2
-        # v6.1：细粒度-1，粗粒度-3；细粒度-3，粗粒度-1；细粒度-1，粗粒度-1；
-        # 前面的想暂时舍弃掉， v7.1： 细粒度-6，粗粒度-5 (88.07)；v7.2: 细粒度-6，粗粒度-10 (88.05) ;v7.3 细粒度-8，粗粒度-5 （88.01632） ;v7.4 细粒度-8，粗粒度-10 （87。99）
-        # v7.5： 细粒度-6，粗粒度-8 (88.034)     v7.6  细粒度-8，粗粒度-8  (88.01) v7.7  细粒度-10，粗粒度-5 (88.1131) ; v7.8  细粒度-10，粗粒度-8  v7.9  细粒度-10，粗粒度-10
         extra_cfg = getattr(cfg.MODEL, "EXTRA", None)
         # 是否拼接backbone特征到输出头（可通过配置控制）
         self.final_fusion_backbone = bool(getattr(extra_cfg, "FINAL_FUSION_BACKBONE", True))
@@ -194,26 +147,13 @@ class OTAPose(BaseModel):
         ))
         if not math.isfinite(self.matching_loss_weight) or self.matching_loss_weight < 0:
             raise ValueError("MATCHING_LOSS_WEIGHT must be finite and non-negative")
-        # Legacy name retained for existing logs and training code comments.
         self.ot_loss_weight = self.matching_loss_weight
         self.ot_lambda_pos = float(getattr(extra_cfg, "OT_LAMBDA_POS", 0.1))
         self.ot_blur = float(getattr(extra_cfg, "OT_BLUR", 0.05))
-        # OT loss method:
-        # - v1: use ot_distillation.py (blur version)
-        # - v2: use ot_distillation_v2.py (temperature version with u/v iteration)
-        # - v3: use ot_distillation_v3.py (v1 cost + v2 u/v iteration)
-        # - both: compute both and blend by OT_LOSS_MIX_RATIO
-        self.ot_loss_method = str(getattr(extra_cfg, "OT_LOSS_METHOD", "v1")).lower()
-        self.ot_temperature = float(getattr(extra_cfg, "OT_TEMPERATURE", 0.1))
-        self.ot_loss_mix_ratio = float(getattr(extra_cfg, "OT_LOSS_MIX_RATIO", 0.5))
-
         if self.dynamic_max_keep_fine is not None:
             self.dynamic_max_keep_fine = int(self.dynamic_max_keep_fine)
         if self.dynamic_max_keep_coarse is not None:
             self.dynamic_max_keep_coarse = int(self.dynamic_max_keep_coarse)
-
-        if self.use_ot_distillation and self.ot_loss_method not in ("v1", "v2", "v3", "both"):
-            raise ValueError("OT_LOSS_METHOD must be one of: 'v1', 'v2', 'v3', 'both'")
 
         if self.use_token_matching:
             if self.token_matching_strategy == "chamfer":
@@ -221,27 +161,15 @@ class OTAPose(BaseModel):
                     lambda_pos=self.ot_lambda_pos,
                 )
             else:
-                if self.ot_loss_method in ("v1", "both"):
-                    self.ot_distillation_loss_v1 = OTDistillationLossV1(
-                        lambda_pos=self.ot_lambda_pos,
-                        blur=self.ot_blur,
-                    )
-                if self.ot_loss_method in ("v2", "both"):
-                    self.ot_distillation_loss_v2 = OTDistillationLossV2(
-                        lambda_pos=self.ot_lambda_pos,
-                        temperature=self.ot_temperature,
-                    )
-                if self.ot_loss_method == "v3":
-                    self.ot_distillation_loss_v3 = OTDistillationLossV3(
-                        lambda_pos=self.ot_lambda_pos,
-                        blur=self.ot_blur,
-                    )
+                self.ot_distillation_loss = OTDistillationLoss(
+                    lambda_pos=self.ot_lambda_pos,
+                    blur=self.ot_blur,
+                )
             # HRB特征维度与LRB特征维度一致时，不需要投影；否则投影到统一维度再做OT。
             # 现在两者都是 EMB_DIM (1024)，所以使用 Identity
             self.ot_teacher_proj = nn.Identity()
             # 初始化last_feat_max，用于记录最后一次forward的feat_max值
             self.last_feat_max = torch.tensor(0.0)
-
 
         args = ModelArgs()
         args.st_layers ,  args.middle_layers ,  args.dim,  args.frames = 2, 2, cfg.MODEL.VIT.EMB_DIM,  self.frame_num
@@ -278,7 +206,6 @@ class OTAPose(BaseModel):
                         nn.LayerNorm(self.token_num),
                     )
 
-
         self.multi_grain_fusion = nn.ModuleList([
             CrossBlock(cfg.MODEL.VIT.EMB_DIM, cfg.MODEL.VIT.EMB_DIM, 8, mlp_ratio=2, qkv_bias=True, qk_scale=None,
                        drop_path=0.04, )
@@ -290,7 +217,6 @@ class OTAPose(BaseModel):
             self.out_backbone_fusion = CHAIN_RSB_BLOCKS(cfg.MODEL.VIT.DECONV2_OUT_CHN+cfg.MODEL.HEAD.DECONV2_OUT_CHN,
                                                         cfg.MODEL.HEAD.FINAL_CONV_IN_CHN , 2)
         # 不拼接时，final_layer直接接收up_sample输出的128通道，无需适配
-
 
         self.up_sample = nn.Sequential(
                 nn.ConvTranspose2d(in_channels=cfg.MODEL.HEAD.DECONV1_IN_CHN,
@@ -339,42 +265,7 @@ class OTAPose(BaseModel):
         return torch.stack((gather_x, gather_y, gather_t), dim=-1)
 
     def _compute_ot_distill_loss(self, teacher_tokens, student_tokens, teacher_pos, student_pos, teacher_mask=None, student_mask=None):
-        if self.ot_loss_method == "v1":
-            loss, feat_max = self.ot_distillation_loss_v1(
-                teacher_tokens,
-                student_tokens,
-                teacher_pos=teacher_pos,
-                student_pos=student_pos,
-                teacher_mask=teacher_mask,
-                student_mask=student_mask,
-            )
-            return loss, feat_max
-
-        if self.ot_loss_method == "v2":
-            loss, feat_max = self.ot_distillation_loss_v2(
-                teacher_tokens,
-                student_tokens,
-                teacher_pos=teacher_pos,
-                student_pos=student_pos,
-                teacher_mask=teacher_mask,
-                student_mask=student_mask,
-            )
-            return loss, feat_max
-
-        if self.ot_loss_method == "v3":
-            loss, feat_max = self.ot_distillation_loss_v3(
-                teacher_tokens,
-                student_tokens,
-                teacher_pos=teacher_pos,
-                student_pos=student_pos,
-                teacher_mask=teacher_mask,
-                student_mask=student_mask,
-            )
-            return loss, feat_max
-
-        # both: blend two OT variants for ablation/robustness.
-        ratio = min(max(self.ot_loss_mix_ratio, 0.0), 1.0)
-        loss_v1, feat_max_v1 = self.ot_distillation_loss_v1(
+        return self.ot_distillation_loss(
             teacher_tokens,
             student_tokens,
             teacher_pos=teacher_pos,
@@ -382,17 +273,6 @@ class OTAPose(BaseModel):
             teacher_mask=teacher_mask,
             student_mask=student_mask,
         )
-        loss_v2, feat_max_v2 = self.ot_distillation_loss_v2(
-            teacher_tokens,
-            student_tokens,
-            teacher_pos=teacher_pos,
-            student_pos=student_pos,
-            teacher_mask=teacher_mask,
-            student_mask=student_mask,
-        )
-        blended_loss = ratio * loss_v1 + (1.0 - ratio) * loss_v2
-        blended_feat_max = (feat_max_v1 + feat_max_v2) / 2.0
-        return blended_loss, blended_feat_max
 
     def _compute_matching_loss(self, teacher_tokens, student_tokens, teacher_pos, student_pos, teacher_mask=None, student_mask=None):
         if self.token_matching_strategy == "chamfer":
@@ -415,7 +295,6 @@ class OTAPose(BaseModel):
             )
         return teacher_tokens.new_zeros(()), teacher_tokens.new_zeros(()).detach()
 
-
     def forward(self, input ,  **kwargs):
         collect_prune_vis = bool(kwargs.get("collect_prune_vis", False))
         force_full_vis = bool(kwargs.get("force_full_vis", False))
@@ -427,8 +306,6 @@ class OTAPose(BaseModel):
         # print(input.shape)
         # print(true_batchsize , channel_num , dim)
 
-
-
         img_cat_batch= torch.cat(input.split(channel_num, dim=1), dim=0)
 
         #vit_backbone forward->outputs are two parts: feature and heatmaps
@@ -436,7 +313,6 @@ class OTAPose(BaseModel):
                                                                                         = self.backbone(img_cat_batch)
 
         feat_up2_backbone_out_curr = feats_up2_backbone_out_cat_batch.split(true_batchsize, dim=0)[0]
-
 
         htms_backbone_list = list(htms_backbone_out_cat_batch.split(true_batchsize, dim=0))
         htms_curr = htms_backbone_list[0]
@@ -456,23 +332,23 @@ class OTAPose(BaseModel):
             # 细粒度分支：只处理关键帧（中间帧）
             # feats_backbone_out_cat_batch: (b * frame_num, frames_tokens, 1024)
             # 每帧有 frames_tokens=192 个 token (16×12)
-            
+
             # 使用预定义的 map_size_up_1x 作为每帧的 H, W
             # map_size_up_1x = (H, W) = (IMAGE_SIZE[1]//PATCH_SIZE, IMAGE_SIZE[0]//PATCH_SIZE)
             Hp, Wp = self.map_size_up_1x[0], self.map_size_up_1x[1]
             b = true_batchsize
-            
+
             # 只提取关键帧（中间帧，索引为 frame_num//2）
             key_frame_idx = 0  # 当前帧 t
             feats_backbone_out_keyframe = feats_backbone_out_cat_batch.split(b, dim=0)[key_frame_idx]
             _, _, feat_dim = feats_backbone_out_keyframe.shape
-            
+
             # reshape: (b, Hp*Wp, C) -> (b, C, Hp, Wp)
             feats_backbone_out_curr = feats_backbone_out_keyframe.reshape(-1, Hp, Wp, feat_dim).permute(0, 3, 1, 2).contiguous()
-            
+
             # 反卷积上采样4倍: (b, 1024, Hp, Wp) → (b, 1024, Hp*2, Wp*2)
             feat_2x = self.fine_grain_deconv(feats_backbone_out_curr)
-            
+
             # reshape为token格式: (b, 1024, H*2, W*2) → (b, H*2*W*2, 1024)
             _, _, fine_h, fine_w = feat_2x.shape
             fine_total_tokens = fine_h * fine_w
@@ -555,7 +431,6 @@ class OTAPose(BaseModel):
                 feat_2x = self.fg_pruned_norm(feat_2x)
                 feat_2x = feat_2x * fine_token_mask.unsqueeze(-1).to(dtype=feat_2x.dtype)
 
-
         #Coarse-grained multi-frame pruning and recovery
         feats_backbone_out_list = list(feats_backbone_out_cat_batch.split(true_batchsize, dim=0))
         coarse_redundancy_stats = None
@@ -599,7 +474,7 @@ class OTAPose(BaseModel):
             self.coarse_prune_vis = coarse_prune_vis
             if self.prune_vis is None:
                 self.prune_vis = coarse_prune_vis
-        
+
         # 获取粗粒度分支实际剪枝后的token数量
         if self.no_prune:
             coarse_keep_tokens = coarse_total_tokens
@@ -683,7 +558,6 @@ class OTAPose(BaseModel):
                 out = blk(out.permute(0, 2, 1).contiguous(), feat_2x, feat_mask=fine_token_mask)
             out = self.multi_grain_norm(out).permute(0,2,1).contiguous()
 
-
         #head
         out = self.up_sample(out.reshape(true_batchsize, -1, self.map_size_up_1x[0], self.map_size_up_1x[1]).contiguous())
 
@@ -704,9 +578,6 @@ class OTAPose(BaseModel):
             "diff_b": htms_curr - htms_supp_B,
             "htms_out": out,
         }
-
-
-
 
         if run_single_lrb:
             if self.use_token_matching:
@@ -730,48 +601,6 @@ class OTAPose(BaseModel):
                 else:
                     # 2元素：(out, htms)
                     return out, htms_curr
-
-
-
-
-
-
-
-
-        # if "heatmaps_sup_cat" in kwargs:
-        #     targ_htms_supp_cat_chn=kwargs["heatmaps_sup_cat"]
-        #     targ_supp_A, targ_supp_B = targ_htms_supp_cat_chn.split(self.num_joints, dim=1)
-        #     if self.use_supp_targ_num == 2:
-        #         htms_supp_A, htms_supp_B = targ_supp_A, targ_supp_B
-        #     elif self.use_supp_targ_num == 1:
-        #         if self.use_supp_direct == 'left':
-        #             htms_supp_A = targ_supp_A
-        #         if self.use_supp_direct == 'right':
-        #             htms_supp_B = targ_supp_B
-
-
-
-
-        # self.htms_dict={
-        #     # 'diff_left':diff_left,
-        #     # 'diff_right':diff_right ,
-        #     # 'diff_left_sigm':diff_left_sigm ,
-        #     # 'diff_right_sigm':diff_right_sigm ,
-        #     # 'diff_left_summed':diff_left_summed ,
-        #     # 'diff_right_summed':diff_right_summed ,
-        #     # 'diff_comb':diff_comb ,
-        #     'mask':mask ,
-        #     'htms_curr':htms_curr ,
-        #     'htms_supp_A':htms_supp_A ,
-        #     'htms_supp_B':htms_supp_B ,
-        #     'final_htms': out,
-        # }
-
-        # return out , feat_cat_batch[0:true_batchsize, :, :] , feat_fused , htms_curr , htms_merg_mask_cat
-
-
-
-
 
     def init_weights(self):
         logger = logging.getLogger(__name__)
@@ -825,18 +654,8 @@ class OTAPose(BaseModel):
         }
         self.token_keep_stats = dict()
 
-
     @classmethod
     def get_model_hyper_parameters(cls, args, cfg):
 
-        hyper_parameters_setting = "ViT_Mamba"
+        hyper_parameters_setting = "OTA-Pose"
         return hyper_parameters_setting
-
-
-
-if __name__ == "__main__":
-
-    print("!!!")
-
-
-

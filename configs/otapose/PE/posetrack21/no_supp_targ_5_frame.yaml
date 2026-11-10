@@ -2,7 +2,7 @@ _BASE_: "../Base_PoseTrack21_5_frame.yaml"
 EXPERIMENT_NAME: 'OTAPose_Network'
 WORKERS: 4
 GPUS: (1,)
-OUTPUT_DIR: 'to/your/path/OUTPUT_DIR'
+OUTPUT_DIR: 'output'
 CUDNN:
   BENCHMARK: true
   DETERMINISTIC: true
@@ -12,9 +12,6 @@ CORE_FUNCTION: Function_No_Supp_Targ_5_Frame_OT
 MODEL:
   NAME: OTAPose
   BACKBONE_NAME: vit
-#  USE_SUPP_TARG_NUM: 0
-#  USE_SUPP_DIRECT: left
-
 
   FRAME_NUM: 5
   EXTRA:
@@ -34,13 +31,6 @@ MODEL:
     FINAL_FUSION_BACKBONE: true
     OT_LAMBDA_POS: 0.1
     OT_BLUR: 0.05
-    OT_LOSS_METHOD: v3
-    OT_TEMPERATURE: 0.1
-    OT_LOSS_MIX_RATIO: 0.5
-    MAMBA:
-      USE_SUPP_TARG_NUM: 0
-
-
 
   VIT:
     PATCH_SIZE: 16
@@ -63,9 +53,6 @@ MODEL:
     DECONV2_OUT_CHN: 128
     FINAL_CONV_IN_CHN: 128
     FINAL_CONV_OUT_CHN: 17
-
-
-
 
 LOSS:
   USE_TARGET_WEIGHT: true
