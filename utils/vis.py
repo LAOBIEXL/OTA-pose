@@ -37,101 +37,6 @@ def dir_judge(folder_path ):
             print(f"Folder '{folder_path}' already exists and is empty.")
 
 
-def vis_htms(dict , image , target , batch_id ,target_left , target_right ):
-    dir_judge(f'./output/vis_htms/{batch_id}')
-    batch_total = target.shape[0]
-    htms_num = target.shape[1]
-
-
-    H , W = image[0].shape[-2], image[0].shape[-1]
-    image_reverse_t = reverse_transforms(image[0]).detach().cpu().numpy().astype(np.uint8).transpose(0,2,3,1)
-    image_reverse_left = reverse_transforms(image[1]).detach().cpu().numpy().astype(np.uint8).transpose(0,2,3,1)
-    image_reverse_right = reverse_transforms(image[2]).detach().cpu().numpy().astype(np.uint8).transpose(0,2,3,1)
-
-    heatmap_backbone_t = dict['htms_curr']
-    heatmap_backbone_left = target_left
-    # heatmap_backbone_left = dict['htms_supp_A']
-    # heatmap_backbone_right = dict['htms_supp_B']
-    heatmap_backbone_right = target_right
-    mask = dict['mask']
-    final_htms = dict['final_htms']
-
-
-    for i in range(0 , batch_total):
-        each_dir = f'./output/vis_htms/{batch_id}/{i}'
-        backbone_htms_t_dir = each_dir + '/backbone_htms_t'
-        backbone_htms_left_dir = each_dir + '/backbone_htms_left'
-        backbone_htms_right_dir = each_dir + '/backbone_htms_right'
-        final_htms_dir = each_dir + '/final_htms'
-        target_dir = each_dir + '/target'
-        dir_judge(backbone_htms_t_dir)
-        dir_judge(backbone_htms_left_dir)
-        dir_judge(backbone_htms_right_dir)
-        dir_judge(final_htms_dir)
-        dir_judge(target_dir)
-
-        dir_list = [backbone_htms_t_dir , backbone_htms_left_dir , backbone_htms_right_dir , final_htms_dir , target_dir]
-
-        image_t = image_reverse_t[i]
-        image_left = image_reverse_left[i]
-        image_right = image_reverse_right[i]
-
-        heatmap_backbone_t_each = heatmap_backbone_t[i]
-        heatmap_backbone_left_each = heatmap_backbone_left[i]
-        heatmap_backbone_right_each = heatmap_backbone_right[i]
-
-        mask_each = mask[i,0]
-        final_htms_each = final_htms[i]
-        target_each = target[i]
-
-        htms_list = [heatmap_backbone_t_each , heatmap_backbone_left_each , heatmap_backbone_right_each , final_htms_each , target_each]
-        image_list = [image_t , image_left , image_right , image_t , image_t]
-
-        cv2.imwrite(os.path.join(each_dir , f'image_t.png'), image_t)
-        cv2.imwrite(os.path.join(each_dir , f'image_left.png'), image_left)
-        cv2.imwrite(os.path.join(each_dir , f'image_right.png'), image_right)
-
-        mask_each = process_htms(mask_each,W,H)
-        cv2.imwrite(os.path.join(each_dir , f'mask.png'), mask_each)
-
-
-        for index , x in enumerate(htms_list):
-            for j in range(htms_num):
-                heatmap = x[j]
-
-                # 归一化热图值到 [0, 1] 范围
-                heatmap_normalized = (heatmap - torch.min(heatmap)) / (torch.max(heatmap) - torch.min(heatmap))
-
-                # 应用颜色映射，这里使用 'jet' 颜色映射
-                heatmap_colormapped = cv2.applyColorMap(np.uint8(255 * heatmap_normalized.cpu().numpy()), cv2.COLORMAP_JET)
-                # heatmap_colormapped = cv2.cvtColor(heatmap_colormapped, cv2.COLOR_BGR2RGB)  # 如果需要转换颜色空间
-                
-                
-                heatmap_colormapped = cv2.resize(heatmap_colormapped, (W, H), interpolation=cv2.INTER_LINEAR)
-
-                alpha = 0.5
-                composite_image = cv2.addWeighted(image_list[index], 1 - alpha, heatmap_colormapped, alpha, 0)
-                
-                
-
-                cv2.imwrite(os.path.join(dir_list[index],f'heatmap_{j}.png'), composite_image)
-
-    print("all vis images have been saved!!!")
-
-
-def process_htms(heatmap, w , h):
-    # 归一化热图值到 [0, 1] 范围
-    heatmap_normalized = (heatmap - torch.min(heatmap)) / (torch.max(heatmap) - torch.min(heatmap))
-
-    # 应用颜色映射，这里使用 'jet' 颜色映射
-    heatmap_colormapped = cv2.applyColorMap(np.uint8(255 * heatmap_normalized.cpu().numpy()), cv2.COLORMAP_JET)
-    # heatmap_colormapped = cv2.cvtColor(heatmap_colormapped, cv2.COLOR_BGR2RGB)  # 如果需要转换颜色空间
-
-    heatmap_colormapped = cv2.resize(heatmap_colormapped, (w, h), interpolation=cv2.INTER_LINEAR)
-
-    return heatmap_colormapped
-
-
 def _normalize_heatmap_tensor(heatmap):
     heatmap = heatmap.detach()
     heatmap_min = torch.min(heatmap)
@@ -165,9 +70,9 @@ def _heatmap_sample_dir(output_root, image_paths, index, batch_id):
     return os.path.join(output_root, *video_parts, frame_name, f"person_{batch_id}_{index}")
 
 
-def vis_vremd(dict, image, target, batch_id, save_dir=None, skip_joints=None, image_paths=None):
+def save_heatmaps(dict, image, target, batch_id, save_dir=None, skip_joints=None, image_paths=None):
     skip_joints = set(skip_joints or [])
-    output_root = os.path.join(save_dir, "heatmaps") if save_dir else f'./output/vis_vremd/{batch_id}'
+    output_root = os.path.join(save_dir, "heatmaps") if save_dir else f'./output/heatmaps/{batch_id}'
     os.makedirs(output_root, exist_ok=True)
     batch_total = target.shape[0]
     htms_num = target.shape[1]

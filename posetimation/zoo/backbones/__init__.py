@@ -1,10 +1,4 @@
-#!/usr/bin/python
-# -*- coding:utf8 -*-
+"""Vision Transformer backbone used by OTA-Pose."""
+from .vit import ViT
 
-__all__ = ["HRNet", "SimpleBaseline" ,"UNET"]
-
-from .hrnet import HRNet
-from .simplebaseline import SimpleBaseline
-from .UNet import UNET
-from .vit import *
-from .vit_v1 import *
+__all__ = ["ViT"]

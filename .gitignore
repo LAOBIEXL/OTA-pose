@@ -1,0 +1,58 @@
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+*.egg-info/
+.eggs/
+/build/
+/dist/
+.coverage
+.coverage.*
+/htmlcov/
+
+# Local environments and credentials
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Local datasets and pretrained models
+/Dataset/
+/data/
+/DcPose_supp_files/
+/pretrained/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+
+# Training, evaluation, and visualization output
+/output/
+/outputs/
+/OUTPUT_DIR/
+/logs/
+/runs/
+/checkpoints/
+/tensorboard/
+/wandb/
+/tmp/
+*.log
+error_log.txt
+events.out.tfevents.*
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

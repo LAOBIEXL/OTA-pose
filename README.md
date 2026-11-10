@@ -1,5 +1,7 @@
 # OTA-Pose
 
+Implementation of video human pose estimation with optimal transport-guided self-distillation and adaptive token pruning. The configurations cover PoseTrack2018 and PoseTrack2021.
+
 ## 1. Getting Started
 
 ### 1.1 Environment Requirement
@@ -82,7 +84,7 @@ OTA-pose/
 
 **4) Configuration Settings**
 
-Before training, modify the dataset and pretrained weight paths in the corresponding YAML configuration files according to your local directory structure.
+The configuration files use the directory layout above. If your data or pretrained backbone is stored elsewhere, update the paths in the corresponding YAML files.
 
 The main configuration files are:
 
@@ -97,6 +99,7 @@ Please check and update the following configuration entries:
 - `MODEL.PRETRAINED`: Path to the ViTPose pretrained weights.
 - `VAL.ANNOT_DIR` and `VAL.COCO_BBOX_FILE`: Validation annotation and detection box paths.
 - `TEST.ANNOT_DIR` and `TEST.COCO_BBOX_FILE`: Test annotation and detection box paths.
+- `OUTPUT_DIR`: Directory for checkpoints, logs, and evaluation output; defaults to `output` under the project root.
 
 For example, if the datasets and supplementary files are placed under the project root, the paths can be configured using relative paths:
 
@@ -152,6 +155,42 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
 
 **Note:** The `--root_dir` argument specifies the project root directory and is used to resolve the relative paths defined in the configuration files.
 
-## 3. Acknowledgements
+## 3. Evaluation
+
+Evaluate a checkpoint produced by training. Set `VAL.MODEL_FILE` to its absolute path:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python tools/run.py \
+    --cfg configs/otapose/PE/posetrack18/no_supp_targ_5_frame.yaml \
+    --root_dir /path/to/OTA-pose \
+    --val \
+    VAL.MODEL_FILE /absolute/path/to/epoch_23_state.pth
+```
+
+For PoseTrack2021, use `configs/otapose/PE/posetrack21/no_supp_targ_5_frame.yaml`.
+
+## 4. Code Structure
+
+| Path | Purpose |
+| --- | --- |
+| `posetimation/zoo/otapose/otapose.py` | OTA-Pose model and its training/inference branches |
+| `posetimation/zoo/otapose/ot_distillation.py` | Optimal transport objective |
+| `posetimation/zoo/otapose/chamfer_distillation.py` | Symmetric Chamfer matching for ablation |
+| `posetimation/zoo/otapose/token_prune_dynamic.py` | Adaptive token selection |
+| `posetimation/zoo/backbones/vit.py` | Shared ViT backbone |
+| `engine/core/function_no_supp_targ_5_frame_ot.py` | Training, evaluation, and profiling |
+| `datasets/zoo/posetrack/PoseTrack_5_frame.py` | PoseTrack clip loading |
+| `configs/otapose/PE/` | Dataset and experiment configurations |
+
+The matching strategy is selected with `MODEL.EXTRA.TOKEN_MATCHING_STRATEGY` (`ot`, `chamfer`, or `none`). Pruning ablations use `MODEL.EXTRA.NO_PRUNE`, `MODEL.EXTRA.DYNAMIC_PRUNE`, and `MODEL.EXTRA.PRUNE_SELECTION` (`score` or `random`).
+
+After preparing the dataset and backbone, run one training batch to check the setup:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python tools/smoke_train.py \
+    --cfg configs/otapose/PE/posetrack18/no_supp_targ_5_frame.yaml
+```
+
+## 5. Acknowledgements
 
 We thank the [DCPose](https://github.com/Pose-Group/DCPose) project for providing supplementary files used in our data preparation, and the [ViTPose](https://github.com/ViTAE-Transformer/ViTPose) project for providing pretrained weights.

@@ -13,7 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from torch import Tensor
-from utils.utils_registry import MODEL_REGISTRY
 # from timm.models.layers import drop_path, to_2tuple, trunc_normal_
 
 # from .base_backbone import BaseBackbone
@@ -133,7 +132,7 @@ class DropPath(nn.Module):
 
     def forward(self, x):
         return drop_path(x, self.drop_prob, self.training)
-    
+
     def extra_repr(self):
         return 'p={}'.format(self.drop_prob)
 
@@ -195,12 +194,12 @@ class Attention(nn.Module):
 
 class Block(nn.Module):
 
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, 
-                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU, 
+    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None,
+                 drop=0., attn_drop=0., drop_path=0., act_layer=nn.GELU,
                  norm_layer=nn.LayerNorm, attn_head_dim=None
                  ):
         super().__init__()
-        
+
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
@@ -278,18 +277,17 @@ class HybridEmbed(nn.Module):
         x = self.proj(x)
         return x
 
-@MODEL_REGISTRY.register()
 class ViT(nn.Module):
     def __init__(self,cfg = None,
                  img_size=224, patch_size=16, in_chans=3, num_classes=80, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., hybrid_backbone=None, norm_layer=None, use_checkpoint=False, 
+                 drop_path_rate=0., hybrid_backbone=None, norm_layer=None, use_checkpoint=False,
                  frozen_stages=-1, ratio=1, last_norm=True,
                  patch_padding='pad', freeze_attn=False, freeze_ffn=False,
                  ):
         super(ViT, self).__init__()
         # Protect mutable default arguments
-        
+
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
@@ -329,16 +327,18 @@ class ViT(nn.Module):
 
 
 
-        self.deconv_layers = nn.Sequential(
+        self.deconv_layers = nn.ModuleList([
                         nn.ConvTranspose2d(in_channels=cfg.MODEL.VIT.DECONV1_IN_CHN, out_channels=cfg.MODEL.VIT.DECONV1_OUT_CHN, kernel_size=4, stride=2, padding=1,
                                            output_padding=0, bias=False),
                         nn.BatchNorm2d(cfg.MODEL.VIT.DECONV1_OUT_CHN),
                         nn.ReLU(inplace=True),
-                        nn.ConvTranspose2d(in_channels=cfg.MODEL.VIT.DECONV2_IN_CHN, out_channels=cfg.MODEL.VIT.DECONV2_OUT_CHN, kernel_size=4, stride=2, padding=1,
+                        nn.ConvTranspose2d(in_channels=cfg.MODEL.VIT.DECONV2_IN_CHN, out_channels=cfg.MODEL.VIT.DECONV2_OUT_CHN,
+                                           kernel_size=4, stride=2, padding=1,
                                            output_padding=0, bias=False),
                         nn.BatchNorm2d(cfg.MODEL.VIT.DECONV2_OUT_CHN),
-                        nn.ReLU(inplace=True),
+                        nn.ReLU(inplace=True),]
         )
+
         final_layer = []
         final_layer.append(nn.Conv2d(in_channels=cfg.MODEL.VIT.FINAL_CONV_IN_CHN,
                          out_channels=cfg.MODEL.VIT.FINAL_CONV_OUT_CHN,
@@ -372,8 +372,6 @@ class ViT(nn.Module):
             state_dict = strip_prefix(state_dict, "backbone.")
             state_dict = strip_prefix(state_dict, "keypoint_head.")
 
-
-
             model_state_dict = self.state_dict()
             for name, param in state_dict.items():
                 if name in model_state_dict:
@@ -385,10 +383,8 @@ class ViT(nn.Module):
                 else:
                     print(f'Drop parameter: {name}')
 
-
-
             self.load_state_dict(model_state_dict, strict=False)
-            # self.load_state_dict(state_dict, strict=False)
+
 
             logger.info('=> loading pretrained model: {}'.format(self.pretrained))
         elif self.pretrained:
@@ -426,22 +422,28 @@ class ViT(nn.Module):
         xp = x.permute(0, 2, 1).reshape(B, -1, Hp, Wp).contiguous()
 
 
-        xp = self.deconv_layers(xp)
+        xp_up_1 = self.deconv_layers[0](xp)
+        xp_up_1 = self.deconv_layers[1](xp_up_1)
+        xp_up_1 = self.deconv_layers[2](xp_up_1)
 
-        xp = self.final_layer(xp)
+        xp_up_2 = self.deconv_layers[3](xp_up_1)
+        xp_up_2 = self.deconv_layers[4](xp_up_2)
+        xp_up_2 = self.deconv_layers[5](xp_up_2)
+
+        out = self.final_layer(xp_up_2)
 
 
 
-        return xp
+        return out , x , xp_up_1 , xp_up_2
 
     def forward(self, x):
-        x = self.forward_features(x)
-        return x
+        y = self.forward_features(x)
+        return y
 
 
 
     @classmethod
-    def get_net(cls, cfg, phase, **kwargs):
+    def get_net(cls, cfg, phase = "train", **kwargs):
         model = ViT(cfg=cfg,
                     img_size=(cfg.MODEL.IMAGE_SIZE[1], cfg.MODEL.IMAGE_SIZE[0]), patch_size=cfg.MODEL.VIT.PATCH_SIZE, in_chans=3,
                     embed_dim=cfg.MODEL.VIT.EMB_DIM,
@@ -462,15 +464,3 @@ class ViT(nn.Module):
 
         hyper_parameters_setting = "vit"
         return hyper_parameters_setting
-
-
-
-
-if __name__ == '__main__':
-
-
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-
-
-

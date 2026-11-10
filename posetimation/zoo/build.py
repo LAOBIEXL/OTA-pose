@@ -6,8 +6,6 @@ from utils.common import TRAIN_PHASE, TEST_PHASE, VAL_PHASE
 import torch.nn as nn
 import logging
 
-# LoRA: 动态注入（冻结原权重，只训练 LoRA）
-from posetimation.lora import inject_lora
 
 logger = logging.getLogger(__name__)
 
@@ -37,21 +35,6 @@ def build_model(cfg, phase, **kwargs):
         logger.info(f'=>Total trainable parameters: {total_trainable_params}')
         logger.info(f'=>Total parameters:          {total_params}')
 
-    # LoRA：在 init_weights 之后注入，冻结原权重只训 LoRA
-    # 注意：验证/测试时也需要注入 LoRA，才能加载训练时保存的 LoRA checkpoint
-    if getattr(cfg.MODEL, 'USE_LORA', False):
-        r = getattr(cfg.MODEL, 'LORA_R', 8)
-        alpha = getattr(cfg.MODEL, 'LORA_ALPHA', 16)
-        target_modules = getattr(cfg.MODEL, 'LORA_TARGET_MODULES', ['qkv', 'proj'])
-        if not isinstance(target_modules, (list, tuple)):
-            target_modules = [target_modules]
-        model_instance = inject_lora(model_instance, r, alpha, target_modules, freeze_other=True)
-        if phase == TRAIN_PHASE:
-            total_trainable_params = count_trainable_parameters(model_instance)
-            logger.info(f'=>Total trainable parameters (after LoRA): {total_trainable_params}')
-        else:
-            logger.info(f'=>LoRA injected for {phase}: r={r}, alpha={alpha}, targets={target_modules}')
-
     if phase != TRAIN_PHASE:
         model_instance.eval()
 
@@ -65,4 +48,3 @@ def get_model_hyperparameter(args, cfg, **kwargs):
     model_name = cfg.MODEL.NAME
     hyper_parameters_setting = MODEL_REGISTRY.get(model_name).get_model_hyper_parameters(args, cfg)
     return hyper_parameters_setting
-

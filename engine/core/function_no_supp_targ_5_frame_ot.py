@@ -1,11 +1,7 @@
 #!/usr/bin/python
 # -*- coding:utf8 -*-
 """
-DC-Pose 训练与评估核心函数模块
-
-该模块实现了无支持目标（No Support Target）5帧光流最优传输（Optimal Transport, OT）训练的
-核心功能类 Function_No_Supp_Targ_5_Frame_OT，继承自 BaseFunction。
-负责模型的训练、验证、测试流程，以及可视化输出和指标统计。
+OTA-Pose 的训练、验证和测试流程，以及可视化输出和指标统计。
 """
 import time
 import torch
@@ -287,7 +283,7 @@ def _test(model, logger=None, stage="Eval", cfg=None):
     模型性能测试函数
 
     使用随机输入数据对模型进行性能评估，包括：
-    - 模型FLOPS（与UGPose一致，直接使用torchprofile返回的MACs口径）
+    - 模型FLOPS（使用torchprofile返回的MACs口径）
     - 推理时间测量
     - FPS（每秒帧率）计算
 
@@ -345,8 +341,7 @@ def _test(model, logger=None, stage="Eval", cfg=None):
 
     model_ref.eval()
 
-    # 1. Full model FLOPs. Keep the same convention as UGPose:
-    # torchprofile returns MACs, and the existing UGPose code reports that value as FLOPs.
+    # 1. Full model FLOPs using the torchprofile MACs convention.
     full_flops = int(_profile(model_ref, random_x, "full_model"))
     full_flops_per_clip = full_flops / flops_batch_size
     run_single_lrb = bool(
@@ -363,7 +358,7 @@ def _test(model, logger=None, stage="Eval", cfg=None):
         stage, _fmt_flops(full_flops), _fmt_flops(full_flops_per_clip)
     )
     logger.info(
-        "=> [%s] Note: FLOPs use UGPose-compatible torchprofile MACs convention; no extra x2 conversion is applied.",
+        "=> [%s] Note: FLOPs are reported as torchprofile MACs.",
         stage
     )
     logger.info(
@@ -482,13 +477,13 @@ def _test(model, logger=None, stage="Eval", cfg=None):
     if hasattr(model_ref, 'up_sample'):
         up_input = torch.randn((b, c_fg, Hp, Wp), device=device)
         head_macs += _profile(model_ref.up_sample, up_input, "up_sample")
-        
+
         with torch.no_grad():
             up_out = model_ref.up_sample(up_input)
-        
+
         if up_out.shape[1] != 128:
             up_out = torch.randn((b, 128, up_out.shape[2], up_out.shape[3]), device=device)
-        
+
         if hasattr(model_ref, 'out_backbone_fusion') and getattr(model_ref, 'final_fusion_backbone', False):
             feat_up2 = torch.randn((b, 256, up_out.shape[2], up_out.shape[3]), device=device)
             concat_out = torch.cat((up_out, feat_up2), dim=1)
@@ -496,10 +491,10 @@ def _test(model, logger=None, stage="Eval", cfg=None):
             final_in = torch.randn((b, 128, up_out.shape[2], up_out.shape[3]), device=device)
         else:
             final_in = up_out
-        
+
         if hasattr(model_ref, 'final_layer'):
             head_macs += _profile(model_ref.final_layer, final_in, "final_layer")
-    
+
     head_flops = int(head_macs)
     logger.info(
         "=> [%s] 6. Output Head FLOPs #: %s total, %s / clip (%.1f%%)",
@@ -713,7 +708,7 @@ class Function_No_Supp_Targ_5_Frame_OT(BaseFunction):
                 - criterion: 损失函数计算器
                 - tb_log_dir: TensorBoard日志目录
                 - writer_dict: TensorBoard writer字典
-                - PE_Name: 姿态估计名称，默认为"SLDPOSE"
+                - PE_Name: 姿态估计名称，默认为"OTAPOSE"
         """
         super().__init__()
         self.cfg = cfg
@@ -726,7 +721,7 @@ class Function_No_Supp_Targ_5_Frame_OT(BaseFunction):
         if "writer_dict" in kwargs.keys():
             self.writer_dict = kwargs["writer_dict"]
 
-        self.PE_Name = kwargs.get("PE_Name", "SLDPOSE")
+        self.PE_Name = kwargs.get("PE_Name", "OTAPOSE")
         ##
         self.max_iter_num = 0  # 当前epoch的最大迭代次数
         self.dataloader_iter = None  # 数据加载器迭代器
@@ -857,10 +852,10 @@ class Function_No_Supp_Targ_5_Frame_OT(BaseFunction):
                     feat_max_val = model.module.last_feat_max.item() if torch.is_tensor(model.module.last_feat_max) else float(model.module.last_feat_max)
                 elif hasattr(model, 'last_feat_max'):
                     feat_max_val = model.last_feat_max.item() if torch.is_tensor(model.last_feat_max) else float(model.last_feat_max)
-                
+
                 # 获取当前batch的token_keep信息
                 token_keep_str = _format_token_keep_stats(_get_token_keep_stats(model))
-                
+
                 msg = 'Epoch: [{0}][{1}/{2}]\t' \
                       'Time {batch_time.val:.3f}s ({batch_time.avg:.3f}s)\t' \
                       'Speed {speed:.1f} samples/s\t' \
@@ -1055,8 +1050,8 @@ class Function_No_Supp_Targ_5_Frame_OT(BaseFunction):
                     model_ref = getattr(model, "module", model)
                     htms_dict = getattr(model_ref, "htms_dict", None)
                     if htms_dict:
-                        from utils.vis import vis_vremd
-                        vis_vremd(
+                        from utils.vis import save_heatmaps
+                        save_heatmaps(
                             htms_dict,
                             image=[input_x, left_image, right_image],
                             target=target_heatmaps,
@@ -1366,13 +1361,6 @@ class Function_No_Supp_Targ_5_Frame_OT(BaseFunction):
             from .vis_helper import draw_skeleton_in_origin_image
             draw_skeleton_in_origin_image(image_paths, coords, bboxes, vis_output_dir, vis_skeleton=cfg.DEBUG.VIS_SKELETON,
                                           vis_bbox=cfg.DEBUG.VIS_BBOX)
-
-        if not getattr(cfg.DEBUG, 'VIS_SAVE', False):
-            return
-
-        from utils.vis_helper import save_debug_images
-        save_debug_images(image_paths, preds, maxvals, vis_output_dir, center, scale, cfg,
-                          self.global_steps)
 
     def vis_setup(self, logger, phase, epoch):
         """
